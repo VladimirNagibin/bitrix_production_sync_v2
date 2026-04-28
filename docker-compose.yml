@@ -1,0 +1,6 @@
+services:
+  bp_sync:
+    build:
+      context: ./bp_sync
+      dockerfile: Dockerfile
+      target: development
