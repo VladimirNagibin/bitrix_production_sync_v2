@@ -80,6 +80,7 @@ class Settings(BaseSettings):
 # Глобальный экземпляр
 settings = Settings()
 
+
 # Экспорт для удобного импорта
 __all__ = [
     # "AppSettings",
