@@ -142,7 +142,7 @@ convention = "google"        # если когда-нибудь включите
 [tool.ruff.format]
 indent-style = "space"
 quote-style = "double"
-nested-string-quote-style = "preferred"  # или "alternating"
+# nested-string-quote-style = "preferred"  # или "alternating"
 skip-magic-trailing-comma = false
 line-ending = "lf"                       # "lf", "crlf", "native"
 docstring-code-format = true             # форматировать код внутри docstring

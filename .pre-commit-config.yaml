@@ -1,0 +1,32 @@
+repos:
+  # Общие хуки (не зависят от языка)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: \.(log|bin|png|jpg|pdf|log.*)$
+      - id: trailing-whitespace
+        exclude: \.(log|bin|png|jpg|pdf|log.*)$
+
+  # Ruff: заменяет Black, isort, Flake8, autoflake и ещё ~700 правил
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6          # актуальная на сегодня, но лучше проверять
+    hooks:
+      # Линтинг + автофикс (исправляет всё, что можно)
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Форматирование (аналог black)
+      - id: ruff-format
+
+  # Mypy – оставляем для проверки типов
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.15.0
+    hooks:
+      - id: mypy
+        args: [--strict, --ignore-missing-imports, --show-error-codes]
+        additional_dependencies:
+          - types-requests
+          - types-aiofiles
+          - pydantic
+          - pydantic-settings
