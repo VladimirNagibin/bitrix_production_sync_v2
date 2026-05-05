@@ -15,7 +15,7 @@ class DatabaseSettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 5442
     user: str = "postgres"
-    password: str = Field("postgres", min_length=PASS_MIN_LENGTH)
+    password: str = Field(default="postgres", min_length=PASS_MIN_LENGTH)
     db_name: str = "bp_sync"
     echo: bool = False
     pool_size: int = Field(

@@ -11,7 +11,10 @@ ADMIN_PASS_MIN_LENGTH = 8
 
 
 class AuthSettings(BaseSettings):
-    secret_key: str = Field(..., min_length=SECRET_KEY_MIN_LENGTH)
+    secret_key: str = Field(
+        default="secret_key",
+        min_length=SECRET_KEY_MIN_LENGTH,
+    )
     algorithm: str = "HS256"
 
     # Access token
@@ -21,7 +24,9 @@ class AuthSettings(BaseSettings):
 
     # Админ по умолчанию (только для dev!)
     admin_username: str = "admin"
-    admin_password: str = Field(..., min_length=ADMIN_PASS_MIN_LENGTH)
+    admin_password: str = Field(
+        default="password", min_length=ADMIN_PASS_MIN_LENGTH
+    )
 
     model_config = SettingsConfigDict(env_prefix="AUTH_")
 
