@@ -28,7 +28,12 @@ class AuthSettings(BaseSettings):
         default="password", min_length=ADMIN_PASS_MIN_LENGTH
     )
 
-    model_config = SettingsConfigDict(env_prefix="AUTH_")
+    model_config = SettingsConfigDict(
+        env_prefix="AUTH_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @field_validator("secret_key")
     @classmethod

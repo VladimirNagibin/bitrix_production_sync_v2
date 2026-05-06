@@ -1,5 +1,6 @@
 import inspect
 import logging
+import logging.config
 
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -244,6 +245,23 @@ def patch_logging_handlers() -> None:
 # ----------------------------------------------------------------------
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("seqlog").setLevel(logging.WARNING)
+
+
+# ----------------------------------------------------------------------
+# Автоматическая инициализация при импорте модуля
+# ----------------------------------------------------------------------
+def _init_logging() -> None:
+    """Применяет конфигурацию и добавляет дополнительные хендлеры."""
+    logging.config.dictConfig(LOGGING_CONFIG)
+    patch_logging_handlers()
+    # Убеждаемся, что логгер "sync" проксирует записи в root
+    sync_logger = logging.getLogger("sync")
+    sync_logger.propagate = True
+    sync_logger.setLevel(getattr(settings.app, "log_level", "INFO"))
+
+
+# Вызываем инициализацию при импорте модуля
+_init_logging()
 
 
 # ----------------------------------------------------------------------

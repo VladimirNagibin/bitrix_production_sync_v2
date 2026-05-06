@@ -1,5 +1,3 @@
-import logging.config
-
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,15 +9,15 @@ from fastapi.staticfiles import StaticFiles
 
 from api.health_checker import health_router
 from core import settings
-from core.logger import LOGGING_CONFIG, logger, patch_logging_handlers
+from core.logger import logger
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Управление жизненным циклом приложения."""
-    logger.info(f"Initializing {app.title} ...")
+    logger.info("Initializing %s ...", app.title)
     yield
-    logger.info(f"Closing {app.title} ...")
+    logger.info("Closing %s ...", app.title)
 
 
 def setup_routes(app: FastAPI) -> None:
@@ -37,7 +35,6 @@ def create_app() -> FastAPI:
     )
     setup_routes(app)
 
-    # Монтируем папку static по URL /static
     static_dir = Path(settings.app.base_dir) / "static"
     if static_dir.exists() and static_dir.is_dir():
         app.mount(
@@ -50,11 +47,6 @@ def create_app() -> FastAPI:
 
 
 def start_server() -> None:
-    # 1. Применяем базовую конфигурацию (консоль)
-    logging.config.dictConfig(LOGGING_CONFIG)
-    # 2. Добавляем файловый и Seq хендлеры
-    patch_logging_handlers()
-    # 3. Запускаем Uvicorn, запрещая ему менять логирование
     uvicorn.run(
         "main:app",
         host=settings.app.host,
@@ -69,5 +61,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    logger.info("Starting server...")
+    logger.info("Starting server %s ...", app.title)
     start_server()

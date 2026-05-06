@@ -24,7 +24,10 @@ class DatabaseSettings(BaseSettings):
     max_overflow: int = MAX_OVERFLOW
 
     model_config = SettingsConfigDict(
-        env_prefix="DB_", case_sensitive=True, extra="ignore"
+        env_prefix="DB_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     @field_validator("port")

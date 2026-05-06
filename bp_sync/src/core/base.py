@@ -19,7 +19,10 @@ class AppSettings(BaseSettings):
     logging_backup_count: int = 5
 
     model_config = SettingsConfigDict(
-        env_prefix="APP_", case_sensitive=True, extra="ignore"
+        env_prefix="APP_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     @property
@@ -34,4 +37,4 @@ class SeqSettings(BaseSettings):
     level: str = LogLevel.DEBUG
     environment: str = "development"
 
-    model_config = SettingsConfigDict(env_prefix="SEQ_")
+    model_config = SettingsConfigDict(env_prefix="SEQ_", extra="ignore")

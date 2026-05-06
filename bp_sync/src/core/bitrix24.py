@@ -30,7 +30,12 @@ class Bitrix24Settings(BaseSettings):
     test_mode: bool = False
     test_deal_id: int | None = None
 
-    model_config = SettingsConfigDict(env_prefix="BITRIX_")
+    model_config = SettingsConfigDict(
+        env_prefix="BITRIX_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     @field_validator("portal_url", "redirect_uri", mode="before")
     @classmethod
