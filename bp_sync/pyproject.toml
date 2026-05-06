@@ -166,6 +166,8 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 
+mypy_path = "stubs"
+
 exclude = ["tests/", "src/__pycache__"]
 
 # Игнорировать отсутствующие импорты для некоторых модулей
@@ -175,6 +177,10 @@ exclude = ["tests/", "src/__pycache__"]
 plugins = [
     "pydantic.mypy"
 ]
+
+[[tool.mypy.overrides]]
+module = "seqlog"
+ignore_missing_imports = true  # Пока нет stub-файла, игнорируем
 
 # [[tool.mypy.overrides]]
 # module = ["fastapi.*", "uvicorn.*", "orjson.*"]
