@@ -4,3 +4,24 @@ services:
       context: ./bp_sync
       dockerfile: Dockerfile
       target: development
+    depends_on:
+      seq:
+        condition: service_healthy
+
+  seq:
+    image: datalust/seq:latest
+    ports:
+      - "5341:80"
+    environment:
+      ACCEPT_EULA: Y
+      SEQ_FIRSTRUN_NOAUTHENTICATION: "true"
+      SEQ_HTTP_LISTEN_PREFIXES: "http://0.0.0.0:80/"          # или http://0.0.0.0:80/
+    # Убедитесь, что нет лишних пробелов и дефисов
+    healthcheck:
+      # Проверяем, открыт ли порт 80 (используя встроенную возможность bash для TCP соединений)
+      test: ["CMD", "bash", "-c", "timeout 1 bash -c ':> /dev/tcp/127.0.0.1/80'"]
+      interval: 5s   # Проверять каждые 5 секунд
+      timeout: 2s    # Таймаут проверки
+      retries: 5     # Количество неудачных попыток перед пометкой как unhealthy
+    # networks:
+    #  - app-network

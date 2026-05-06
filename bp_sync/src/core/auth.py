@@ -12,7 +12,7 @@ ADMIN_PASS_MIN_LENGTH = 8
 
 class AuthSettings(BaseSettings):
     secret_key: str = Field(
-        default="secret_key",
+        default="your-32-char-min-secret-key-here!!!",
         min_length=SECRET_KEY_MIN_LENGTH,
     )
     algorithm: str = "HS256"

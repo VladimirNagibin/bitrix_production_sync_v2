@@ -10,7 +10,7 @@ class AppSettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     reload: bool = False
-    log_level: LogLevel = LogLevel.INFO
+    log_level: LogLevel = LogLevel.DEBUG
     base_dir: Path = Path(__file__).resolve().parent.parent
 
     # Логирование
@@ -31,7 +31,7 @@ class SeqSettings(BaseSettings):
     enabled: bool = False
     url: str = "http://localhost:5341"
     api_key: str = ""
-    level: str = "INFO"
+    level: str = LogLevel.DEBUG
     environment: str = "development"
 
     model_config = SettingsConfigDict(env_prefix="SEQ_")

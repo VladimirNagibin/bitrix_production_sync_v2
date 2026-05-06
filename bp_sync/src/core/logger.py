@@ -1,125 +1,82 @@
 import inspect
 import logging
 
-from logging import config
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 from pythonjsonlogger.json import JsonFormatter
+from requests.exceptions import (
+    ConnectionError as RequestsConnectionError,
+)
+from requests.exceptions import (
+    RequestException,
+)
+from requests.exceptions import (
+    Timeout as RequestsTimeout,
+)
 from seqlog import SeqLogHandler
 
-from core import LogLevel, settings
-
-
-# ----------------------------------------------------------------------
-# Вспомогательные функции
-# ----------------------------------------------------------------------
-def create_directory(path: Path) -> None:
-    """Создаёт директорию рекурсивно, если её нет."""
-    path.mkdir(parents=True, exist_ok=True)
+from core import settings
 
 
 # ----------------------------------------------------------------------
 # Кастомный фильтр для добавления имени класса и метода
 # ----------------------------------------------------------------------
 class CallerInfoFilter(logging.Filter):
-    """
-    Добавляет в запись лога поля:
-        - module_name  (имя модуля)
-        - class_name   (имя класса, если вызов внутри метода класса)
-        - method_name  (имя функции или метода)
-    Использует интроспекцию стека.
-    """
+    """Добавляет в запись лога module_name, class_name, method_name."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        # Ищем вызов логгера в стеке
-        # Структура стека: [текущий filter, логгер, ... , вызывающий код]
-        caller_frame = None
-        frame = None
         try:
-            frame = inspect.currentframe()
-            # Поднимаемся на 3 кадра вверх:
-            # 0: этот filter(), 1: Logger._log(), 2: Logger.debug/info...,
-            # 3: место, где вызван логгер
             stack = inspect.stack()
-            # Находим первый кадр, который не принадлежит модулю logging
-            for frame_info in stack[2:]:  # пропускаем filter и _log
-                if (
-                    frame_info.filename != __file__
-                    and not frame_info.filename.startswith("<")
-                ):
-                    caller_frame = frame_info.frame
-                    break
-
-            if caller_frame:
-                # Извлекаем информацию о вызывающем коде
-                frame_locals = caller_frame.f_locals
-                # Имя метода (функции)
-                record.method_name = caller_frame.f_code.co_name
-                # Имя модуля (файла)
-                record.module_name = caller_frame.f_code.co_filename
-                # Имя класса (если есть self или cls в locals)
+            # Ищем первый вызов за пределами этого модуля и модуля logging
+            for frame_info in stack[1:]:
+                filename = frame_info.filename
+                if filename == __file__ or "logging" in filename:
+                    continue
+                record.module_name = filename
+                record.method_name = frame_info.function
+                # Пытаемся найти self или cls в locals кадра
+                frame_locals = frame_info.frame.f_locals
                 obj = frame_locals.get("self") or frame_locals.get("cls")
-                if obj:
-                    record.class_name = obj.__class__.__name__
-                else:
-                    record.class_name = ""
+                record.class_name = obj.__class__.__name__ if obj else ""
+                # Нашли нужный кадр – выходим
+                break
             else:
+                record.module_name = ""
                 record.class_name = ""
                 record.method_name = ""
-                record.module_name = ""
-        finally:
-            # Очищаем ссылки на кадры, чтобы избежать циклов сборщика мусора
-            if frame:
-                del frame
-            if caller_frame:
-                del caller_frame
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).debug(
+                f"CallerInfoFilter error: {e}", exc_info=True
+            )
+            record.module_name = record.class_name = record.method_name = ""
         return True
 
 
 # ----------------------------------------------------------------------
-# Форматтеры
+# Форматтер для JSON
 # ----------------------------------------------------------------------
-# JSON-форматтер с добавлением полей из кастомного фильтра
 json_formatter = JsonFormatter(
     fmt=(
         "%(asctime)s %(levelname)s %(name)s %(module_name)s %(class_name)s "
         "%(method_name)s %(message)s"
     ),
-    # Преобразуем время в ISO формат
     datefmt="%Y-%m-%dT%H:%M:%S",
-    # Если нужно добавить дополнительные поля (например, имя процесса),
-    # можно расширить этот словарь
-    # extra={'hostname': socket.gethostname()}
-    # Можно добавить exclude или rename, если нужно
     json_encoder=None,
 )
 
 
 # ----------------------------------------------------------------------
-# Функция создания Seq-хендлера
-# ----------------------------------------------------------------------
-def get_seq_handler() -> SeqLogHandler:
-    """Создает и настраивает хендлер для Seq."""
-    return SeqLogHandler(
-        server_url=settings.seq.url,
-        api_key=settings.seq.api_key,
-        batch_size=10,  # Отправлять логи пачками
-        auto_flush_timeout=1.0,  # Или раз в секунду
-        # flush_on_exit=True,  # Отправить оставшиеся логи при завершении
-        # fail_on_exception=False,  # Не падать при ошибках отправки
-    )
-
-
-# ----------------------------------------------------------------------
-# Базовый словарь конфигурации логгеров (для console и uvicorn)
+# Единая конфигурация логирования (включает все хендлеры и фильтры)
 # ----------------------------------------------------------------------
 LOGGING_CONFIG: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "caller_info": {"()": CallerInfoFilter},
+    },
     "formatters": {
-        # JSON форматтер для консоли и файлов
         "json": {
             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
             "fmt": (
@@ -128,8 +85,6 @@ LOGGING_CONFIG: dict[str, Any] = {
             ),
             "datefmt": "%Y-%m-%dT%H:%M:%S",
         },
-        # Если нужно оставить читаемый текст для Uvicorn (опционально),
-        # но для Seq обычно всё переводят в JSON.
         "default": {
             "()": "uvicorn.logging.DefaultFormatter",
             "fmt": "%(levelprefix)s %(message)s",
@@ -138,49 +93,43 @@ LOGGING_CONFIG: dict[str, Any] = {
         "access": {
             "()": "uvicorn.logging.AccessFormatter",
             "fmt": (
-                "%(levelprefix)s %(client_addr)s - "
-                "'%(request_line)s' %(status_code)s"
+                "%(levelprefix)s %(client_addr)s - '%(request_line)s' "
+                "%(status_code)s"
             ),
         },
     },
     "handlers": {
-        # Консольный вывод (теперь в JSON)
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json",
             "stream": "ext://sys.stdout",
+            "filters": ["caller_info"],
         },
-        # Хендлер для Seq (будет добавлен программно,
-        # так как SeqLogHandler не всегда удобно конфигурировать через dict)
-        # "seq": {
-        #     "class": "seqlog.SeqLogHandler",
-        #     ...
-        # }
-        # Uvicorn хендлеры
         "default": {
-            "formatter": "default",
             "class": "logging.StreamHandler",
+            "formatter": "default",
             "stream": "ext://sys.stdout",
         },
         "access": {
-            "formatter": "access",
             "class": "logging.StreamHandler",
+            "formatter": "access",
             "stream": "ext://sys.stdout",
         },
     },
     "loggers": {
         "": {
-            "handlers": ["console"],  # только консоль, Seq добавим отдельно
+            "handlers": ["console"],
             "level": settings.app.log_level,
+            "propagate": True,
         },
         "uvicorn.error": {
-            "level": LogLevel.INFO,
-            "handlers": ["default"],  # Можно также заменить formatter на json
+            "level": settings.app.log_level,
+            "handlers": ["default"],
             "propagate": False,
         },
         "uvicorn.access": {
+            "level": settings.app.log_level,
             "handlers": ["access"],
-            "level": LogLevel.INFO,
             "propagate": False,
         },
     },
@@ -188,81 +137,116 @@ LOGGING_CONFIG: dict[str, Any] = {
 
 
 # ----------------------------------------------------------------------
-# Инициализация логгера
+# Функции для создания дополнительных хендлеров
 # ----------------------------------------------------------------------
-def setup_logging() -> None:
+def _create_file_handler() -> RotatingFileHandler | None:
     """
-    Настраивает всё логирование:
-        - применяет базовую конфигурацию (консоль + uvicorn)
-        - добавляет кастомный фильтр CallerInfoFilter в корневой логгер
-        - добавляет Seq-хендлер (если включён)
-        - добавляет файловый хендлер с ротацией (если включён)
+    Создаёт и возвращает файловый хендлер с ротацией, или None при ошибке.
     """
-    # Применяем базовую конфигурацию
-    config.dictConfig(LOGGING_CONFIG)
+    try:
+        log_dir = Path(settings.app.base_dir) / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
 
-    root_logger = logging.getLogger()
-    # Устанавливаем уровень из настроек приложения
-    root_logger.setLevel(settings.app.log_level)
+        file_path = log_dir / "log.json"
+        handler = RotatingFileHandler(
+            file_path,
+            maxBytes=getattr(
+                settings.app, "logging_file_max_bytes", 10 * 1024 * 1024
+            ),
+            backupCount=getattr(settings.app, "logging_backup_count", 5),
+            encoding="utf-8",
+        )
+        handler.setFormatter(json_formatter)
+        handler.addFilter(CallerInfoFilter())
+        handler.setLevel(settings.app.log_level)
+    except (OSError, PermissionError, ValueError) as e:
+        logging.getLogger(__name__).error(
+            f"Failed to create file handler: {e}", exc_info=True
+        )
+        return None
+    else:
+        return handler
 
-    # Добавляем фильтр для обогащения логов информацией о вызывающем коде
-    root_logger.addFilter(CallerInfoFilter())
 
-    # Логгер для сообщений о процессе настройки (используем уже настроенный)
-    setup_logger = logging.getLogger(__name__)
+def _create_seq_handler() -> SeqLogHandler | None:
+    """Создаёт и возвращает Seq-хендлер, или None при ошибке."""
+    if not settings.seq.url:
+        return None
 
-    # Настройка Seq
-    if settings.seq.url:
-        try:
-            seq_handler = get_seq_handler()
-            seq_handler.setLevel(settings.seq.level)
-            root_logger.addHandler(seq_handler)
-            setup_logger.info(f"Seq logging enabled: {settings.seq.url}")
-        except (ConnectionError, TimeoutError, ValueError, OSError) as e:
-            setup_logger.error(
-                f"Failed to create Seq handler: {e}", exc_info=True
-            )
-        except Exception as e:
-            # Если возникло неожиданное исключение, логируем его тоже
-            setup_logger.error(
-                f"Unexpected error while creating Seq handler: {e}",
-                exc_info=True,
-            )
+    try:
+        handler = SeqLogHandler(
+            server_url=settings.seq.url,
+            api_key=settings.seq.api_key,
+            batch_size=10,
+            auto_flush_timeout=1.0,
+        )
+        handler.setLevel(
+            getattr(logging, settings.seq.level.upper(), logging.INFO)
+        )
+        handler.addFilter(CallerInfoFilter())
+    except (
+        RequestsConnectionError,
+        RequestsTimeout,
+        RequestException,
+        OSError,
+        ValueError,
+    ) as e:
+        logging.getLogger(__name__).error(
+            f"Failed to create Seq handler: {e}", exc_info=True
+        )
+        return None
+    except Exception as e:
+        # Неожиданная ошибка — логируем, но не останавливаем приложение
+        logging.getLogger(__name__).error(
+            f"Unexpected error while creating Seq handler: {e}", exc_info=True
+        )
+        return None
+    else:
+        return handler
 
-    # Файловый логгер с ротацией (JSON)
+
+# ----------------------------------------------------------------------
+# Патчинг дополнительных хендлеров
+# ----------------------------------------------------------------------
+def patch_logging_handlers() -> None:
+    """
+    Добавляет файловый и Seq хендлеры к корневому логгеру.
+    Предотвращает дублирование хендлеров при многократном вызове.
+    """
+    root = logging.getLogger()
+
+    # Проверяем, не добавлен ли уже файловый хендлер
     if getattr(settings.app, "log_to_file", False):
-        try:
-            log_dir = Path(settings.app.base_dir) / "logs"
-            create_directory(log_dir)
+        already_has_file = any(
+            isinstance(h, RotatingFileHandler) for h in root.handlers
+        )
+        if not already_has_file:
+            file_handler = _create_file_handler()
+            if file_handler:
+                root.addHandler(file_handler)
 
-            file_path = log_dir / "log.json"
-            file_handler = RotatingFileHandler(
-                file_path,
-                maxBytes=getattr(
-                    settings.app, "logging_file_max_bytes", 10 * 1024 * 1024
-                ),
-                backupCount=getattr(settings.app, "logging_backup_count", 5),
-                encoding="utf-8",
-            )
-            file_handler.setLevel(settings.app.log_level)
-            file_handler.setFormatter(json_formatter)
-            root_logger.addHandler(file_handler)
-        except (OSError, PermissionError, ValueError) as e:
-            setup_logger.error(
-                f"Failed to create file handler: {e}", exc_info=True
-            )
-        except Exception as e:
-            setup_logger.error(
-                f"Unexpected error while creating file handler: {e}",
-                exc_info=True,
-            )
+    # Seq хендлер
+    if settings.seq.url:
+        already_has_seq = any(
+            isinstance(h, SeqLogHandler) for h in root.handlers
+        )
+        if not already_has_seq:
+            seq_handler = _create_seq_handler()
+            if seq_handler:
+                root.addHandler(seq_handler)
+                logging.getLogger(__name__).info(
+                    f"Seq logging enabled: {settings.seq.url}"
+                )
 
 
 # ----------------------------------------------------------------------
-# Глобальный логгер для использования в приложении
+# Отключаем излишний DEBUG от библиотек
 # ----------------------------------------------------------------------
-# Вызываем настройку при импорте модуля
-setup_logging()
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("seqlog").setLevel(logging.WARNING)
 
-# Экспортируемый логгер
+
+# ----------------------------------------------------------------------
+# Глобальный логгер приложения
+# ----------------------------------------------------------------------
 logger = logging.getLogger("sync")

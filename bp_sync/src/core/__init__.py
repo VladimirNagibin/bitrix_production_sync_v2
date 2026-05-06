@@ -41,7 +41,10 @@ class Settings(BaseSettings):
     # business: BusinessSettings = Field(default_factory=BusinessSettings)
 
     # === Глобальные ===
-    encryption_key: str = Field(default="", min_length=44)  # Fernet key
+    encryption_key: str = Field(
+        default="your-fernet-key-generated-by-cryptography.fernet.Fernet.generate_key",
+        min_length=ENCRIPTION_KEY_MIN_LENGTH,
+    )  # Fernet key
     max_file_size: int = 20 * 1024 * 1024  # 20 МБ
 
     model_config = SettingsConfigDict(
