@@ -2,9 +2,10 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from .auth import SECRET_KEY_MIN_LENGTH, AuthSettings
-from .base import AppSettings
+from .base import AppSettings, SeqSettings
 from .bitrix24 import Bitrix24Settings
 from .database import DatabaseSettings, RabbitSettings, RedisSettings
+from .utils import LogLevel
 
 
 ENCRIPTION_KEY_MIN_LENGTH = 44
@@ -18,6 +19,7 @@ class Settings(BaseSettings):
 
     # === Приложение ===
     app: AppSettings = Field(default_factory=AppSettings)
+    seq: SeqSettings = Field(default_factory=SeqSettings)
 
     # === Инфраструктура ===
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
@@ -95,6 +97,7 @@ __all__ = [
     "AuthSettings",
     "Bitrix24Settings",
     "DatabaseSettings",
+    "LogLevel",
     "RedisSettings",
     "Settings",
     "settings",

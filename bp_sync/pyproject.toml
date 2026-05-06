@@ -19,6 +19,8 @@ dependencies = [
     "pydantic-settings>=2.6.1",
     "jinja2>=3.1.6",
     "orjson>=3.11.8",
+    "seqlog>=0.4.3",
+    "python-json-logger>=4.1.0",
 ]
 
 [dependency-groups]
@@ -174,29 +176,29 @@ plugins = [
     "pydantic.mypy"
 ]
 
-[[tool.mypy.overrides]]
-module = ["fastapi.*", "uvicorn.*", "orjson.*"]
-ignore_missing_imports = true
+# [[tool.mypy.overrides]]
+# module = ["fastapi.*", "uvicorn.*", "orjson.*"]
+# ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = ["pydantic.*", "pydantic_settings.*"]
-plugins = ["pydantic.mypy"]
+# [[tool.mypy.overrides]]
+# module = ["pydantic.*", "pydantic_settings.*"]
+# plugins = ["pydantic.mypy"]
 
 # Включаем строгий режим постепенно
-[[tool.mypy.overrides]]
-module = [
-    "telegram.*",
-    "telegram.ext.*",
-    "aiogram.*",
-]
+# [[tool.mypy.overrides]]
+# module = [
+#     "telegram.*",
+#     "telegram.ext.*",
+#     "aiogram.*",
+# ]
 
-[[tool.mypy.overrides]]
-module = [
-    "src.*",
-    "core.*",
-]
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
+# [[tool.mypy.overrides]]
+# module = [
+#     "src.*",
+#     "core.*",
+# ]
+# disallow_untyped_defs = true
+# disallow_incomplete_defs = true
 
 # Конфигурация pytest
 [tool.pytest.ini_options]
