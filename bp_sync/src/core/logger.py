@@ -27,6 +27,9 @@ from core import settings
 from .utils import FILTER_FIELDS, SYSTEM_FIELDS, LogLevel
 
 
+# ----------------------------------------------------------------------
+# Константы настройки
+# ----------------------------------------------------------------------
 SEQ_BATCH_SIZE = 1
 SEQ_AUTO_FLASH_INTERVAL = 2.0
 SEQ_TIMEOUT = 5
@@ -43,6 +46,8 @@ class SeqJsonHandler(logging.Handler):
     Логи буферизируются и отправляются пачками (batch) для повышения
     производительности. При ошибках отправки буфер очищается,
     чтобы избежать бесконечных повторных попыток.
+    Использует блокирующий `requests`, что может
+    замедлить работу асинхронных приложений при высокой нагрузке.
     """
 
     def __init__(
@@ -145,7 +150,10 @@ class SeqJsonHandler(logging.Handler):
             self._logger.error(
                 "Network error sending to Seq: %s", e, exc_info=True
             )
-            self.batch.clear()  # при batch_size=1 теряем одно событие
+            self._fail_count += 1
+            # При потере пакета на network error, мы теряем батч,
+            # чтобы не забивать буфер и не ломать логирование
+            self.batch.clear()
         except (ValueError, TypeError) as e:
             self._logger.error(
                 "Data error sending to Seq: %s", e, exc_info=True
@@ -167,10 +175,11 @@ class SeqJsonHandler(logging.Handler):
     def close(self) -> None:
         """Гарантированная отправка оставшихся логов при закрытии."""
         try:
-            self._logger.info(
-                "Closing Seq handler, flushing %d events", len(self.batch)
-            )
-            self.flush()
+            if self.batch:
+                self._logger.info(
+                    "Closing Seq handler, flushing %d events", len(self.batch)
+                )
+                self.flush()
         finally:
             super().close()
 
@@ -199,7 +208,26 @@ class SeqClefFormatter(logging.Formatter):
         return dt.strftime(datefmt or "%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
     def format(self, record: logging.LogRecord) -> str:
-        """Форматирует запись в CLEF-событие."""
+        """Форматирует запись в JSON-событие с защитой от падений."""
+        try:
+            return self._format_impl(record)
+        except Exception as e:  # noqa: BLE001
+            # Fallback: если всё упало, возвращаем безопасный минимальный JSON
+            return json.dumps(
+                {
+                    "Timestamp": self.formatTime(record),
+                    "MessageTemplate": str(record.getMessage()),
+                    "Level": "ERROR",
+                    "Properties": {
+                        "RenderingError": str(e),
+                        "OriginalMessage": str(record.msg),
+                    },
+                },
+                ensure_ascii=False,
+            )
+
+    def _format_impl(self, record: logging.LogRecord) -> str:
+        """Реальная логика форматирования."""
 
         # Обязательные поля CLEF
         event: dict[str, Any] = {
@@ -212,7 +240,7 @@ class SeqClefFormatter(logging.Formatter):
         if record.exc_info:
             event["Exception"] = self.formatException(record.exc_info)  # @x
 
-        # Добавляем стандартные свойства
+        # Формируем контекстные свойства
         properties: dict[str, Any] = {
             "Logger": record.name,
             "ProcessId": record.process,
@@ -222,10 +250,11 @@ class SeqClefFormatter(logging.Formatter):
             "Function": record.funcName,
         }
 
-        # Поля из кастомного фильтра (module_name, class_name, method_name)
+        #  Кастомные поля из фильтра (module_name, class_name, method_name)
         for attr, dest in FILTER_FIELDS:
-            if hasattr(record, attr) and getattr(record, attr):
-                properties[dest] = getattr(record, attr)
+            val = getattr(record, attr, None)
+            if val:
+                properties[dest] = val
 
         # Все поля из extra (исключая системные)
         for key, value in record.__dict__.items():
@@ -244,6 +273,7 @@ class SeqClefFormatter(logging.Formatter):
         # Добавляем свойства к событиям
         if properties:
             event["Properties"] = properties
+
         return json.dumps(event, ensure_ascii=False)
 
 
@@ -260,10 +290,17 @@ class CallerInfoFilter(logging.Filter):
             stack = inspect.stack()
             for frame_info in stack[1:]:
                 filename = frame_info.filename
-                if filename == __file__ or "logging" in filename:
+                if (
+                    filename == __file__
+                    or "logging" in filename
+                    or "/logging/" in filename
+                    or "\\logging\\" in filename
+                ):
                     continue
                 record.module_name = filename
                 record.method_name = frame_info.function
+
+                # Пытаемся найти self или cls
                 frame_locals = frame_info.frame.f_locals
                 obj = frame_locals.get("self") or frame_locals.get("cls")
                 record.class_name = obj.__class__.__name__ if obj else ""
@@ -282,7 +319,7 @@ class CallerInfoFilter(logging.Filter):
 
 
 # ----------------------------------------------------------------------
-# Дополнительные функции и конфигурация
+# Форматтер для консоли и файла
 # ----------------------------------------------------------------------
 json_formatter = JsonFormatter(
     fmt=(
@@ -293,6 +330,10 @@ json_formatter = JsonFormatter(
     json_encoder=None,
 )
 
+
+# ----------------------------------------------------------------------
+# Конфигурация логирования (dictConfig)
+# ----------------------------------------------------------------------
 LOGGING_CONFIG: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -432,7 +473,7 @@ def _create_seq_handler() -> logging.Handler | None:
 
 
 # ----------------------------------------------------------------------
-# Патчинг дополнительных хендлеров
+# Патчинг хендлеров (инициализация)
 # ----------------------------------------------------------------------
 def patch_logging_handlers() -> None:
     """
@@ -440,10 +481,12 @@ def patch_logging_handlers() -> None:
     """
     root = logging.getLogger()
 
+    # Флаги успешного создания для логирования в конце
     file_enabled = False
     seq_enabled = False
     seq_url = ""
 
+    # 1. Файловый хендлер
     if getattr(settings.app, "log_to_file", False):
         already_has_file = any(
             isinstance(h, RotatingFileHandler) for h in root.handlers
@@ -454,6 +497,7 @@ def patch_logging_handlers() -> None:
                 root.addHandler(file_handler)
                 file_enabled = True
 
+    # 2. Seq хендлер
     if settings.seq.url:
         already_has_seq = any(
             isinstance(h, SeqJsonHandler) for h in root.handlers
@@ -465,6 +509,8 @@ def patch_logging_handlers() -> None:
                 seq_enabled = True
                 seq_url = settings.seq.url
 
+    # 3. Логируем статус только ПОСЛЕ настройки,
+    # чтобы логи попали в новый хендлер
     if file_enabled:
         logging.getLogger(__name__).info("File logging enabled")
 
@@ -473,28 +519,27 @@ def patch_logging_handlers() -> None:
 
 
 # ----------------------------------------------------------------------
-# Отключаем излишний DEBUG от библиотек
+# Настройка уровня логов внешних библиотек
 # ----------------------------------------------------------------------
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 # ----------------------------------------------------------------------
-# Инициализация при импорте модуля
+# Инициализация модуля
 # ----------------------------------------------------------------------
 _init_done = False
 
 
 def _init_logging() -> None:
-    """
-    Инициализация логирования: базовый dictConfig + дополнительные хендлеры.
-    """
+    """Инициализация логирования при импорте модуля."""
     global _init_done
     if _init_done:
         return
+
     logging.config.dictConfig(LOGGING_CONFIG)
     patch_logging_handlers()
 
-    # Настройка логгера sync
+    # Настройка логгера приложения
     sync_logger = logging.getLogger("sync")
     sync_logger.propagate = True
     sync_logger.setLevel(getattr(settings.app, "log_level", LogLevel.INFO))
@@ -512,11 +557,10 @@ def _init_logging() -> None:
     _init_done = True
 
 
-# Вызываем инициализацию при импорте модуля
+# ----------------------------------------------------------------------
+# Точка входа настройки
+# ----------------------------------------------------------------------
 _init_logging()
 
-
-# ----------------------------------------------------------------------
-# Глобальный логгер для использования в приложении
-# ----------------------------------------------------------------------
+# Глобальный логгер
 logger = logging.getLogger("sync")
