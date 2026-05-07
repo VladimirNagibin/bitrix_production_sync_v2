@@ -36,3 +36,41 @@ def validate_positive_int(field_name: str, v: int) -> int:
             "Значение должно быть положительным",
         )
     return v
+
+
+SYSTEM_FIELDS = (
+    "args",
+    "asctime",
+    "created",
+    "exc_info",
+    "exc_text",
+    "filename",
+    "funcName",
+    "levelname",
+    "levelno",
+    "lineno",
+    "module",
+    "msecs",
+    "message",
+    "msg",
+    "name",
+    "pathname",
+    "process",
+    "processName",
+    "relativeCreated",
+    "stack_info",
+    "thread",
+    "threadName",
+    "module_name",
+    "class_name",
+    "method_name",
+    "source_line",
+)
+
+
+FILTER_FIELDS = [
+    ("module_name", "SourceModule"),
+    ("class_name", "SourceClass"),
+    ("method_name", "SourceMethod"),
+    ("source_line", "SourceLine"),
+]
