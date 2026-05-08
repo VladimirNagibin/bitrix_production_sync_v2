@@ -23,6 +23,9 @@ async def health_check() -> SuccessResponse:
     description="Test.",
 )  # type: ignore[misc]
 async def test() -> SuccessResponse:
+    # from core.exceptions.base import BaseAppException
+    # from core.exceptions.settings import SettingsError
+    # from core.logger import logger
     # try:
     #     raise SettingsError(message="test")
     # except BaseAppException as e:
