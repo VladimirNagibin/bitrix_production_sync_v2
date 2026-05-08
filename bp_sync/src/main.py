@@ -4,12 +4,16 @@ from pathlib import Path
 
 import uvicorn
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.health_checker import health_router
 from core import settings
+from core.exceptions.base import BaseAppException
 from core.logger import logger
+from middleware.execution_time_middleware import ExecutionTimeMiddleware
+from schemas.response_schema import ErrorResponse
 
 
 @asynccontextmanager
@@ -25,6 +29,28 @@ def setup_routes(app: FastAPI) -> None:
     app.include_router(health_router, prefix="/api/health", tags=["health"])
 
 
+def register_exception_handler(app: FastAPI) -> None:
+    """
+    Регистрирует глобальные обработчики исключений для приложения.
+    """
+
+    @app.exception_handler(BaseAppException)  # type: ignore[misc]
+    async def app_exception_handler(
+        request: Request, exc: BaseAppException
+    ) -> JSONResponse:
+        """Обработчик для всех наших бизнес-исключений."""
+        _ = request
+        status_code = getattr(exc, "status_code", status.HTTP_400_BAD_REQUEST)
+        return JSONResponse(
+            status_code=status_code,
+            content=ErrorResponse(
+                error_code=exc.error_code,
+                message=exc.message,
+                details=exc.details,
+            ).model_dump(mode="json"),
+        )
+
+
 def create_app() -> FastAPI:
     """Фабрика для создания приложения."""
     app = FastAPI(
@@ -34,6 +60,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     setup_routes(app)
+    register_exception_handler(app)
 
     static_dir = Path(settings.app.base_dir) / "static"
     if static_dir.exists() and static_dir.is_dir():
@@ -42,6 +69,8 @@ def create_app() -> FastAPI:
         )
     else:
         logger.warning(f"Static directory not found: {static_dir}")
+
+    app.add_middleware(ExecutionTimeMiddleware)
 
     return app
 

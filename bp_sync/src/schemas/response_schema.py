@@ -16,6 +16,9 @@ class BaseResponse(BaseModel):
         default_factory=lambda: datetime.now(UTC),
         description="Время ответа сервера в формате ISO 8601",
     )
+    execution_time: float | None = Field(
+        default=None, description="Время выполнения запроса в миллисекундах"
+    )
 
 
 class SuccessResponse(BaseResponse):
