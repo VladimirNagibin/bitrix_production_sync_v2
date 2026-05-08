@@ -1,9 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
+from core import settings
 from schemas.response_schema import SuccessResponse
 
 
 health_router = APIRouter()
+templates = Jinja2Templates(directory=f"{settings.app.base_dir}/templates")
 
 
 @health_router.get(
@@ -15,6 +19,18 @@ async def health_check() -> SuccessResponse:
     return SuccessResponse(
         message="check was successful", data={"status": "healthy"}
     )
+
+
+@health_router.get(
+    "/",
+    summary="check page",
+    description="Simple page.",
+    name="index",
+)  # type: ignore[misc]
+async def simple_page(
+    request: Request,
+) -> HTMLResponse:
+    return templates.TemplateResponse(request, "base.html")
 
 
 @health_router.get(

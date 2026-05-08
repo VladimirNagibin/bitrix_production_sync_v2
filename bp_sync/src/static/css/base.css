@@ -1,0 +1,40 @@
+/* Общие стили */
+body {
+    min-height: 100vh;
+}
+
+/* Десктопное боковое меню */
+@media (min-width: 768px) {
+    .sidebar {
+        width: 260px;
+        position: fixed;
+        top: 56px; /* высота navbar */
+        bottom: 0;
+        left: 0;
+        z-index: 100;
+        padding: 20px 0;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        overflow-y: auto;
+    }
+    .main-content {
+        margin-left: 260px;
+        padding: 20px;
+    }
+}
+
+/* Мобильная версия – меню скрыто, контент без отступа */
+@media (max-width: 767.98px) {
+    .sidebar {
+        display: none;
+    }
+    .main-content {
+        padding: 15px;
+    }
+}
+
+/* Активный пункт меню */
+.nav-link.active {
+    font-weight: bold;
+    background-color: #e9ecef;
+}
