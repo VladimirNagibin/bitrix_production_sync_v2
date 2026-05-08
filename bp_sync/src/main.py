@@ -35,7 +35,7 @@ def register_exception_handler(app: FastAPI) -> None:
     """
 
     @app.exception_handler(BaseAppException)  # type: ignore[misc]
-    async def app_exception_handler(
+    async def app_exception_handler(  # pyright: ignore [reportUnusedFunction]
         request: Request, exc: BaseAppException
     ) -> JSONResponse:
         """Обработчик для всех наших бизнес-исключений."""
