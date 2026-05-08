@@ -27,7 +27,7 @@ async def test() -> SuccessResponse:
     # from core.exceptions.settings import SettingsError
     # from core.logger import logger
     # try:
-    #     raise SettingsError(message="test")
+    #     raise SettingsError(message="test error")
     # except BaseAppException as e:
     #     logger.error("Testing error: %s", e, exc_info=True)
     #     raise

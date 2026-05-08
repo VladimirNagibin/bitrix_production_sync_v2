@@ -1,5 +1,6 @@
 import json
 import time
+import uuid
 
 from typing import cast
 
@@ -29,9 +30,14 @@ class ExecutionTimeMiddleware(BaseHTTPMiddleware):  # type: ignore[misc]
     ) -> Response:
         """Обрабатывает входящий запрос и исходящий ответ."""
         start_time = time.perf_counter()
+        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
 
         # Передаем управление следующему middleware или эндпоинту
         response = await call_next(request)
+
+        execution_time = round((time.perf_counter() - start_time) * 1000.0, 4)
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Execution-Time-Ms"] = str(execution_time)
 
         # Модифицируем только JSON-ответы
         content_type = response.headers.get("content-type", "")
@@ -60,10 +66,8 @@ class ExecutionTimeMiddleware(BaseHTTPMiddleware):  # type: ignore[misc]
                 data = json.loads(body.decode())
 
                 if isinstance(data, dict):
-                    data["execution_time"] = (
-                        time.perf_counter() - start_time
-                    ) * 1000.0
-
+                    data["execution_time"] = execution_time
+                    data["request_id"] = request_id
                     # Формируем новый ответ с обновленным телом.
                     # Удаляем Content-Length, так как длина изменилась.
                     headers = dict(response.headers)

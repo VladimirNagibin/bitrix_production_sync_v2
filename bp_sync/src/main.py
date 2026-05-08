@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from api.health_checker import health_router
 from core import settings
 from core.exceptions.base import BaseAppException
+from core.exceptions.enums import ErrorCode
 from core.logger import logger
 from middleware.execution_time_middleware import ExecutionTimeMiddleware
 from schemas.response_schema import ErrorResponse
@@ -39,7 +40,8 @@ def register_exception_handler(app: FastAPI) -> None:
         request: Request, exc: BaseAppException
     ) -> JSONResponse:
         """Обработчик для всех наших бизнес-исключений."""
-        _ = request
+        execution_time = float(request.headers.get("X-Execution-Time-Ms", 0))
+        request_id = request.headers.get("X-Request-ID")
         status_code = getattr(exc, "status_code", status.HTTP_400_BAD_REQUEST)
         return JSONResponse(
             status_code=status_code,
@@ -47,7 +49,46 @@ def register_exception_handler(app: FastAPI) -> None:
                 error_code=exc.error_code,
                 message=exc.message,
                 details=exc.details,
+                request_id=request_id,
             ).model_dump(mode="json"),
+            headers={
+                "X-Request-ID": request_id or "",
+                "X-Execution-Time-Ms": str(execution_time),
+            },
+        )
+
+    @app.exception_handler(Exception)  # type: ignore[misc]
+    async def handle_unexpected_exception(  # pyright: ignore [reportUnusedFunction]
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        """Фолбэк-обработчик для всех остальных исключений."""
+        execution_time = float(request.headers.get("X-Execution-Time-Ms", 0))
+        request_id = request.headers.get("X-Request-ID")
+
+        logger.error(
+            "Unexpected error",
+            extra={
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+                "path": request.url.path,
+                "method": request.method,
+            },
+            exc_info=True,
+        )
+
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=ErrorResponse(
+                error_code=ErrorCode.INTERNAL_ERROR,
+                message="Внутренняя ошибка сервера",
+                details={"error_type": type(exc).__name__},
+                request_id=request_id,
+                execution_time=execution_time,
+            ).model_dump(mode="json"),
+            headers={
+                "X-Request-ID": request_id or "",
+                "X-Execution-Time-Ms": str(execution_time),
+            },
         )
 
 

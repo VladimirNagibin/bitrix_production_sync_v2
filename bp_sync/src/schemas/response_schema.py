@@ -19,6 +19,10 @@ class BaseResponse(BaseModel):
     execution_time: float | None = Field(
         default=None, description="Время выполнения запроса в миллисекундах"
     )
+    request_id: str | None = Field(
+        default=None,
+        description="Уникальный идентификатор запроса для трассировки",
+    )
 
 
 class SuccessResponse(BaseResponse):
