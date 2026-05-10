@@ -17,9 +17,10 @@ class DatabaseError(BaseAppException):
         error_code: str | ErrorCode = ErrorCode.ERROR_WORKING_WITH_DB,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка при работе с БД"
-        super().__init__(error_code, msg, details)
+        super().__init__(error_code, msg, details, status_code)
 
 
 class DatabaseConnectionError(DatabaseError):
@@ -29,12 +30,14 @@ class DatabaseConnectionError(DatabaseError):
         self,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Не удалось подключиться к базе данных"
         super().__init__(
             error_code=ErrorCode.DB_CONNECTION_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -45,10 +48,12 @@ class DatabaseLoadError(DatabaseError):
         self,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка загрузки данных в БД"
         super().__init__(
             error_code=ErrorCode.ERROR_LOADING_DATA_TO_DB,
             message=msg,
             details=details,
+            status_code=status_code,
         )

@@ -7,6 +7,22 @@ services:
     ports:
      - 8000:8000
 
+  bp_sync-migrations:
+    volumes:
+      - ./bp_sync/src:/app/src
+    env_file:
+      - ./.env
+
+  db:
+    ports:
+     - 5442:5432
+    env_file:
+      - ./.env
+
+  redis:
+    ports:
+      - 6379:6379
+
   seq:
     volumes:
       - seq-data:/data
@@ -17,3 +33,5 @@ services:
 
 volumes:
   seq-data:
+  db_data:
+  redis-data:

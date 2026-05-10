@@ -19,10 +19,11 @@ class FileSystemError(BaseAppException):
         error_code: str | ErrorCode = ErrorCode.FILE_PROCESSING_ERROR,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         self.path = str(path)
         msg = message or f"Ошибка при работе с файлом: {self.path}"
-        super().__init__(error_code, msg, details)
+        super().__init__(error_code, msg, details, status_code)
 
 
 class FileAppNotFoundError(FileSystemError, FileNotFoundError):
@@ -33,6 +34,7 @@ class FileAppNotFoundError(FileSystemError, FileNotFoundError):
         path: Path | str,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         path_str = str(path)
         msg = message or f"Файл не найден: {path_str}"
@@ -41,6 +43,7 @@ class FileAppNotFoundError(FileSystemError, FileNotFoundError):
             error_code=ErrorCode.FILE_NOT_FOUND_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -52,6 +55,7 @@ class FileNotZipError(FileSystemError):
         path: Path | str,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         path_str = str(path)
         msg = message or f"Расширение файла не zip: {path_str}"
@@ -60,6 +64,7 @@ class FileNotZipError(FileSystemError):
             error_code=ErrorCode.FILE_NOT_ZIP_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -71,6 +76,7 @@ class ZipExtractionError(FileSystemError):
         path: Path | str,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         path_str = str(path)
         msg = message or f"Ошибка распаковки файла: {path_str}"
@@ -79,6 +85,7 @@ class ZipExtractionError(FileSystemError):
             error_code=ErrorCode.ZIP_EXTRACTION_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -92,6 +99,7 @@ class FileTooLargeError(FileSystemError):
         max_file_size: int | None = None,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         path_str = str(path)
         if not message:
@@ -108,6 +116,7 @@ class FileTooLargeError(FileSystemError):
             error_code=ErrorCode.FILE_TOO_LARGE,
             message=message,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -119,6 +128,7 @@ class CsvParsingError(FileSystemError):
         path: Path | str,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         path_str = str(path)
         msg = message or f"Ошибка парсинга CSV файла: {path_str}"
@@ -127,6 +137,7 @@ class CsvParsingError(FileSystemError):
             error_code=ErrorCode.CSV_FILE_PARSING_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -138,6 +149,7 @@ class FileUploadError(FileSystemError):
         path: Path | str,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         path_str = str(path)
         msg = message or f"Ошибка загрузки файла: {path_str}"
@@ -146,4 +158,5 @@ class FileUploadError(FileSystemError):
             error_code=ErrorCode.FILE_UPLOAD_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )

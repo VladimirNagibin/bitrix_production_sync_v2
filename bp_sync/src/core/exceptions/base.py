@@ -11,10 +11,12 @@ class BaseAppException(Exception):
         error_code: str | ErrorCode,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         self.error_code = str(error_code)
         self.message = message or self.__class__.__name__
         self.details = details
+        status_code = status_code
         super().__init__(self.message)
 
     def __repr__(self) -> str:

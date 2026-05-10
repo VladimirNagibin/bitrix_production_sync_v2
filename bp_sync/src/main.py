@@ -1,3 +1,5 @@
+import sys
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,6 +15,7 @@ from core import settings
 from core.exceptions.base import BaseAppException
 from core.exceptions.enums import ErrorCode
 from core.logger import logger
+from db.redis import close_redis, init_redis
 from middleware.execution_time_middleware import ExecutionTimeMiddleware
 from schemas.response_schema import ErrorResponse
 
@@ -21,8 +24,17 @@ from schemas.response_schema import ErrorResponse
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Управление жизненным циклом приложения."""
     logger.info("Initializing %s ...", app.title)
+    try:
+        await init_redis()
+    except Exception as e:  # noqa: BLE001
+        logger.critical("Fatal error during startup: %s", e)
+        # Если произошла ошибка при старте, завершаем работу
+        sys.exit(1)
     yield
     logger.info("Closing %s ...", app.title)
+    await close_redis()
+
+    logger.info("Application shutdown complete.")
 
 
 def setup_routes(app: FastAPI) -> None:

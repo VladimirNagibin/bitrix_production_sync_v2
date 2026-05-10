@@ -17,9 +17,10 @@ class DataProcessingError(BaseAppException):
         error_code: str | ErrorCode = ErrorCode.DATA_PROCESSING_ERROR,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка при обработки данных"
-        super().__init__(error_code, msg, details)
+        super().__init__(error_code, msg, details, status_code)
 
 
 class PriceProcessingError(DataProcessingError):
@@ -29,12 +30,14 @@ class PriceProcessingError(DataProcessingError):
         self,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка при обработке прайс-листа"
         super().__init__(
             error_code=ErrorCode.PRICE_PROCESSING_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )
 
 
@@ -45,9 +48,12 @@ class SupplierDataError(PriceProcessingError):
         self,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка при чтении или записи данных поставщика"
-        super().__init__(message=msg, details=details)
+        super().__init__(
+            message=msg, details=details, status_code=status_code
+        )
         self.error_code = ErrorCode.SUPPLIER_DATA_ERROR
 
 
@@ -58,7 +64,10 @@ class ExcelProcessingError(PriceProcessingError):
         self,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка при чтении или записи Excel"
-        super().__init__(message=msg, details=details)
+        super().__init__(
+            message=msg, details=details, status_code=status_code
+        )
         self.error_code = ErrorCode.EXCEL_PROCESSING_ERROR

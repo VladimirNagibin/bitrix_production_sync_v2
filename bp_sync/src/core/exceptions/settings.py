@@ -17,9 +17,10 @@ class SettingsError(BaseAppException):
         error_code: str | ErrorCode = ErrorCode.SETTINGS_ERROR,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ) -> None:
         msg = message or "Ошибка при работе с конфигурацией"
-        super().__init__(error_code, msg, details)
+        super().__init__(error_code, msg, details, status_code=status_code)
 
 
 class InvalidSettingsValueError(SettingsError):
@@ -32,6 +33,7 @@ class InvalidSettingsValueError(SettingsError):
         reason: str,
         message: str | None = None,
         details: Any | None = None,
+        status_code: int | None = None,
     ):
         self.field_name = field_name
         self.value = value
@@ -41,4 +43,5 @@ class InvalidSettingsValueError(SettingsError):
             error_code=ErrorCode.INVALID_SETTINGS_VALUE_ERROR,
             message=msg,
             details=details,
+            status_code=status_code,
         )

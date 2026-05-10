@@ -38,14 +38,13 @@ async def simple_page(
     summary="test",
     description="Test.",
 )  # type: ignore[misc]
-async def test() -> SuccessResponse:
-    # from core.exceptions.base import BaseAppException
-    # from core.exceptions.settings import SettingsError
-    # from core.logger import logger
+async def test(
+    # redis: Redis = Depends(get_redis),
+) -> SuccessResponse:
     # try:
     #     raise SettingsError(message="test error")
     # except BaseAppException as e:
     #     logger.error("Testing error: %s", e, exc_info=True)
     #     raise
 
-    return SuccessResponse(message="test", data={"status": "test"})
+    return SuccessResponse(message="test", data={"status": "ok"})
