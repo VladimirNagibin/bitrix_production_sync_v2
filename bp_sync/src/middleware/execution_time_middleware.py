@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, Response
 from core.logger import logger
 
 
+# ===== Middleware для измерения времени выполнения запроса =====
 class ExecutionTimeMiddleware(BaseHTTPMiddleware):  # type: ignore[misc]
     """
     Middleware для измерения времени выполнения запроса и добавления метрик

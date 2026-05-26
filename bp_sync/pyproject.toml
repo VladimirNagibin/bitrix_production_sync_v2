@@ -16,6 +16,10 @@ dependencies = [
     "python-json-logger>=4.1.0",
     "requests>=2.33.1",
     "redis>=7.4.0",
+    "sqlalchemy>=2.0.49",
+    "asyncpg>=0.31.0",
+    "sqladmin>=0.25.0",
+    "alembic>=1.18.4",
 ]
 
 [dependency-groups]

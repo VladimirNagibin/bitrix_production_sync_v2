@@ -12,6 +12,7 @@ services:
       - ./bp_sync/src:/app/src
     env_file:
       - ./.env
+    working_dir: /app/src
 
   db:
     ports:

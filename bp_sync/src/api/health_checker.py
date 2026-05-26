@@ -33,18 +33,31 @@ async def simple_page(
     return templates.TemplateResponse(request, "base.html")
 
 
-@health_router.get(
-    "/test",
-    summary="test",
-    description="Test.",
-)  # type: ignore[misc]
-async def test(
-    # redis: Redis = Depends(get_redis),
-) -> SuccessResponse:
-    # try:
-    #     raise SettingsError(message="test error")
-    # except BaseAppException as e:
-    #     logger.error("Testing error: %s", e, exc_info=True)
-    #     raise
+# from typing import Annotated
 
-    return SuccessResponse(message="test", data={"status": "ok"})
+# from fastapi import Depends
+
+# from dependencies.dependencies_bitrix_entity import (
+#     get_contact_bitrix_client
+# )
+# from services.contacts.contact_bitrix_client import ContactBitrixClient
+
+
+# @health_router.get(
+#     "/test",
+#     summary="test",
+#     description="Test.",
+# )  # type: ignore[misc]
+# async def test(
+#     contact_bitrix_client: Annotated[
+#         ContactBitrixClient, Depends(get_contact_bitrix_client)
+#     ],
+# ) -> SuccessResponse:
+
+#     client = await contact_bitrix_client.get(2)
+#     # await contact_bitrix_client.bitrix_client.oauth_client.
+#     #     token_storage.delete_token("access_token")
+#     # await contact_bitrix_client.bitrix_client.oauth_client.
+#     #     token_storage.delete_token("refresh_token")
+
+#     return SuccessResponse(message="test", data=client.dict())

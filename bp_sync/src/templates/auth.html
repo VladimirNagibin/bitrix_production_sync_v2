@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статус авторизации Битрикс24</title>
+    <!-- Кастомные стили -->
+    <link href="{{ url_for('static', path='/css/auth.css') }}" rel="stylesheet">
+</head>
+<body>
+
+    <div class="container">
+        {% if auth_url %}
+            <!-- Блок, если auth_url передан (требуется авторизация) -->
+            <h2>Требуется авторизация</h2>
+            <p>Для продолжения работы необходимо разрешить доступ приложению.</p>
+            <br>
+            <a href="{{ auth_url }}" class="btn">Перейти к авторизации</a>
+
+        {% else %}
+            <!-- Блок, если auth_url пустой или None (все хорошо) -->
+            <div class="status-ok">OK</div>
+            <p>Токен действителен, приложение авторизовано.</p>
+        {% endif %}
+    </div>
+
+</body>
+</html>

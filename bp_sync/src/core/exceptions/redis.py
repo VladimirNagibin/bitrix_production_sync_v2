@@ -1,11 +1,22 @@
+"""
+Модуль исключений для Redis клиента.
+
+Содержит иерархию исключений, возникающих при работе с Redis:
+ошибки подключения, аутентификации, таймауты, неинициализированный клиент
+и т.д.
+"""
+
 from typing import Any
 
 from .base import BaseAppException
 from .enums import ErrorCode
 
 
+# ====== Исключения, связанные с Redis =======
 class RedisManagerError(BaseAppException):
     """Базовое исключение для ошибок Redis клиента."""
+
+    DEFAULT_MESSAGE = "Redis operation failed"
 
     def __init__(
         self,
@@ -14,12 +25,26 @@ class RedisManagerError(BaseAppException):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Ошибка при работе с Redis"
-        super().__init__(error_code, msg, details, status_code=status_code)
+        """
+        Инициализирует RedisManagerError.
+
+        Args:
+            error_code: Код ошибки
+            message: Сообщение об ошибке
+            details: Дополнительные детали
+            status_code: HTTP статус-код (если применимо)
+        """
+        final_message = message or self.DEFAULT_MESSAGE
+        super().__init__(error_code, final_message, details, status_code)
 
 
 class RedisManagerConnectionError(RedisManagerError):
-    """Ошибка подключения к Redis (сетевые проблемы, таймаут и т.д.)."""
+    """
+    Исключение, возникающее при ошибке подключения к Redis
+    (сетевые проблемы, таймаут и т.д.).
+    """
+
+    DEFAULT_MESSAGE = "Failed to connect to Redis"
 
     def __init__(
         self,
@@ -27,17 +52,28 @@ class RedisManagerConnectionError(RedisManagerError):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Не удалось подключиться к Redis"
+        """
+        Инициализирует RedisManagerConnectionError.
+
+        Args:
+            message: Сообщение об ошибке
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
             error_code=ErrorCode.REDIS_CONNECTION_ERROR,
-            message=msg,
+            message=message or self.DEFAULT_MESSAGE,
             details=details,
             status_code=status_code,
         )
 
 
 class RedisManagerAuthError(RedisManagerError):
-    """Ошибка аутентификации в Redis (неверный пароль)."""
+    """
+    Исключение, возникающее при ошибке аутентификации в Redis.
+    """
+
+    DEFAULT_MESSAGE = "Redis authentication failed"
 
     def __init__(
         self,
@@ -45,17 +81,26 @@ class RedisManagerAuthError(RedisManagerError):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Ошибка аутентификации в Redis"
+        """
+        Инициализирует RedisManagerAuthError.
+
+        Args:
+            message: Сообщение об ошибке
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
             error_code=ErrorCode.REDIS_AUTH_ERROR,
-            message=msg,
+            message=message or self.DEFAULT_MESSAGE,
             details=details,
             status_code=status_code,
         )
 
 
 class RedisManagerNotInitializedError(RedisManagerError):
-    """Redis клиент не был инициализирован."""
+    """Исключение, возникающее когда Redis клиент не был инициализирован."""
+
+    DEFAULT_MESSAGE = "Redis client not initialized"
 
     def __init__(
         self,
@@ -63,17 +108,28 @@ class RedisManagerNotInitializedError(RedisManagerError):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Redis клиент не был инициализирован"
+        """
+        Инициализирует RedisManagerNotInitializedError.
+
+        Args:
+            message: Сообщение об ошибке
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
             error_code=ErrorCode.REDIS_NOT_INIT_ERROR,
-            message=msg,
+            message=message or self.DEFAULT_MESSAGE,
             details=details,
             status_code=status_code,
         )
 
 
 class RedisManagerTimeoutError(RedisManagerError):
-    """Тайм-аут операции Redis."""
+    """
+    Исключение, возникающее при превышении времени ожидания операции Redis.
+    """
+
+    DEFAULT_MESSAGE = "Redis operation timeout"
 
     def __init__(
         self,
@@ -81,10 +137,17 @@ class RedisManagerTimeoutError(RedisManagerError):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Тайм-аут операции Redis"
+        """
+        Инициализирует RedisManagerTimeoutError.
+
+        Args:
+            message: Сообщение об ошибке
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
             error_code=ErrorCode.REDIS_TIME_OUT_ERROR,
-            message=msg,
+            message=message or self.DEFAULT_MESSAGE,
             details=details,
             status_code=status_code,
         )

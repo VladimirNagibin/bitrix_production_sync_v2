@@ -12,8 +12,8 @@ services:
       retries: 10
       start_period: 50s
     depends_on:
-      # db:
-      #  condition: service_healthy
+      db:
+        condition: service_healthy
       redis:
         condition: service_healthy
       seq:
@@ -23,6 +23,7 @@ services:
     build:
       context: ./bp_sync
       dockerfile: Dockerfile
+      target: development
     restart: no
     depends_on:
       db:
@@ -47,7 +48,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "psql -h localhost -U $${POSTGRES_USER} -c select 1 -d $${POSTGRES_DB_NAME}"]
+      test: ["CMD-SHELL", "psql -h localhost -U $${POSTGRES_USER} -c select 1 -d $${POSTGRES_DB}"]
       interval: 5s
       retries: 5
       start_period: 0s

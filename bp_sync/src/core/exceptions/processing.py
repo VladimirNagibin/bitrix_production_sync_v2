@@ -1,16 +1,21 @@
+"""
+Модуль исключений для обработки данных.
+
+Содержит иерархию исключений, возникающих при обработке данных:
+прайс-листов, поставщиков, Excel-файлов и других операций.
+"""
+
 from typing import Any
 
 from .base import BaseAppException
 from .enums import ErrorCode
 
 
-# ----------------------------------------------------------------------
-# Исключения для обработки данных
-# ----------------------------------------------------------------------
-
-
+# ===== Исключения для обработки данных =====
 class DataProcessingError(BaseAppException):
     """Базовое исключение для ошибок обработки данных."""
+
+    DEFAULT_MESSAGE = "Data processing error"
 
     def __init__(
         self,
@@ -19,10 +24,20 @@ class DataProcessingError(BaseAppException):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Ошибка при обработки данных"
-        super().__init__(error_code, msg, details, status_code)
+        """
+        Инициализирует DataProcessingError.
+
+        Args:
+            error_code: Код ошибки
+            message: Сообщение об ошибке (на английском)
+            details: Дополнительные детали
+            status_code: HTTP статус-код (если применимо)
+        """
+        final_message = message or self.DEFAULT_MESSAGE
+        super().__init__(error_code, final_message, details, status_code)
 
 
+# ===== Исключения для прайс-листов =====
 class PriceProcessingError(DataProcessingError):
     """Ошибка при обработке прайс-листа."""
 
@@ -32,10 +47,17 @@ class PriceProcessingError(DataProcessingError):
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Ошибка при обработке прайс-листа"
+        """
+        Инициализирует PriceProcessingError.
+
+        Args:
+            message: Сообщение об ошибке (на английском)
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
             error_code=ErrorCode.PRICE_PROCESSING_ERROR,
-            message=msg,
+            message=message or self.DEFAULT_MESSAGE,
             details=details,
             status_code=status_code,
         )
@@ -44,15 +66,26 @@ class PriceProcessingError(DataProcessingError):
 class SupplierDataError(PriceProcessingError):
     """Ошибка при работе с данными поставщика."""
 
+    DEFAULT_MESSAGE = "Supplier data operation failed"
+
     def __init__(
         self,
         message: str | None = None,
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Ошибка при чтении или записи данных поставщика"
+        """
+        Инициализирует SupplierDataError.
+
+        Args:
+            message: Сообщение об ошибке (на английском)
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
-            message=msg, details=details, status_code=status_code
+            message=message or self.DEFAULT_MESSAGE,
+            details=details,
+            status_code=status_code,
         )
         self.error_code = ErrorCode.SUPPLIER_DATA_ERROR
 
@@ -60,14 +93,25 @@ class SupplierDataError(PriceProcessingError):
 class ExcelProcessingError(PriceProcessingError):
     """Ошибка при чтении/записи Excel-файлов."""
 
+    DEFAULT_MESSAGE = "Excel file processing error"
+
     def __init__(
         self,
         message: str | None = None,
         details: Any | None = None,
         status_code: int | None = None,
     ) -> None:
-        msg = message or "Ошибка при чтении или записи Excel"
+        """
+        Инициализирует ExcelProcessingError.
+
+        Args:
+            message: Сообщение об ошибке (на английском)
+            details: Дополнительные детали
+            status_code: HTTP статус-код
+        """
         super().__init__(
-            message=msg, details=details, status_code=status_code
+            message=message or self.DEFAULT_MESSAGE,
+            details=details,
+            status_code=status_code,
         )
         self.error_code = ErrorCode.EXCEL_PROCESSING_ERROR
