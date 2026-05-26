@@ -512,7 +512,7 @@ class DataMappingMixin(BaseModel):
             result["valueId"] = value.value_id
 
         # Рекурсивно обрабатываем вложенное поле 'value'
-        if hasattr(value, "value") and value.value is not None:  # pyright: ignore[comparison-overlap]
+        if hasattr(value, "value") and value.value is not None:  # pyright: ignore[reportUnnecessaryComparison]
             nested_value = value.value
             if isinstance(nested_value, BaseModel):
                 # Если вложенное значение - это другая Pydantic-модель

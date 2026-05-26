@@ -122,7 +122,7 @@ class ListResponseSchema[T: CommonFieldMixin](BaseModel):
         не допустит, но явная проверка не помешает).
         Логирует предупреждение, если result None.
         """
-        if self.result is None:  # pyright: ignore[comparison-overlap]
+        if self.result is None:  # pyright: ignore[reportUnnecessaryComparison]
             logger.warning("Result field is None, replacing with empty list")
             self.result = []
         return self
@@ -180,7 +180,7 @@ class ListResponseSchema[T: CommonFieldMixin](BaseModel):
             ...     items=[{"id": 1}, {"id": 2}], total=100, next_cursor=2
             ... )
         """
-        if not isinstance(items, list):  # pyright: ignore[comparison-overlap]
+        if not isinstance(items, list):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise PaginationError(
                 message=(
                     f"Expected items to be a list, got {type(items).__name__}"
