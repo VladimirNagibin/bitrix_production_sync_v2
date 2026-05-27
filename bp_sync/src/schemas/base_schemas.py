@@ -36,18 +36,22 @@ class CommonFieldMixin(DataMappingMixin):
         init_var=False,
         description="Внутренний UUID идентификатор",
         examples=["123e4567-e89b-12d3-a456-426614174000"],
+        json_schema_extra={"exclude_from_bitrix": True},
     )
     created_at: datetime | None = Field(
         default=None,
         description="Дата и время создания записи",
+        json_schema_extra={"exclude_from_bitrix": True},
     )
     updated_at: datetime | None = Field(
         default=None,
         description="Дата и время последнего обновления",
+        json_schema_extra={"exclude_from_bitrix": True},
     )
     is_deleted: bool | None = Field(
         default=None,
         description="Флаг удаления",
+        json_schema_extra={"exclude_from_bitrix": True},
     )
     external_id: int | str | None = Field(
         default=None,
@@ -229,10 +233,22 @@ class ListResponseSchema[T: CommonFieldMixin](BaseModel):
 class BaseFieldMixin:
     """Базовые поля для большинства сущностей."""
 
-    comments: str | None = Field(None, alias="COMMENTS")
-    source_description: str | None = Field(None, alias="SOURCE_DESCRIPTION")
-    originator_id: str | None = Field(None, alias="ORIGINATOR_ID")
-    origin_id: str | None = Field(None, alias="ORIGIN_ID")
+    comments: str | None = Field(
+        None, alias="COMMENTS", json_schema_extra={"bitrix_type": "str_none"}
+    )
+    source_description: str | None = Field(
+        None,
+        alias="SOURCE_DESCRIPTION",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    originator_id: str | None = Field(
+        None,
+        alias="ORIGINATOR_ID",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    origin_id: str | None = Field(
+        None, alias="ORIGIN_ID", json_schema_extra={"bitrix_type": "str_none"}
+    )
 
 
 class TimestampsCreateMixin:
@@ -241,22 +257,26 @@ class TimestampsCreateMixin:
     date_create: datetime = Field(
         ...,
         validation_alias=AliasChoices("DATE_CREATE", "createdTime"),
+        json_schema_extra={"bitrix_type": "datetime"},
     )
     date_modify: datetime = Field(
         ...,
         validation_alias=AliasChoices("DATE_MODIFY", "updatedTime"),
+        json_schema_extra={"bitrix_type": "datetime"},
     )
     last_activity_time: datetime | None = Field(
         None,
         validation_alias=AliasChoices(
             "LAST_ACTIVITY_TIME", "lastActivityTime"
         ),
+        json_schema_extra={"bitrix_type": "datetime_none"},
     )
     last_communication_time: datetime | None = Field(
         None,
         validation_alias=AliasChoices(
             "LAST_COMMUNICATION_TIME", "lastCommunicationTime"
         ),
+        json_schema_extra={"bitrix_type": "datetime_alt_none"},
     )
 
 
@@ -266,22 +286,26 @@ class TimestampsUpdateMixin:
     date_create: datetime | None = Field(
         None,
         validation_alias=AliasChoices("DATE_CREATE", "createdTime"),
+        json_schema_extra={"bitrix_type": "datetime"},
     )
     date_modify: datetime | None = Field(
         None,
         validation_alias=AliasChoices("DATE_MODIFY", "updatedTime"),
+        json_schema_extra={"bitrix_type": "datetime"},
     )
     last_activity_time: datetime | None = Field(
         None,
         validation_alias=AliasChoices(
             "LAST_ACTIVITY_TIME", "lastActivityTime"
         ),
+        json_schema_extra={"bitrix_type": "datetime_none"},
     )
     last_communication_time: datetime | None = Field(
         None,
         validation_alias=AliasChoices(
             "LAST_COMMUNICATION_TIME", "lastCommunicationTime"
         ),
+        json_schema_extra={"bitrix_type": "datetime_alt_none"},
     )
 
 
@@ -291,18 +315,22 @@ class UserRelationsCreateMixin:
     assigned_by_id: int = Field(
         ...,
         validation_alias=AliasChoices("ASSIGNED_BY_ID", "assignedById"),
+        json_schema_extra={"bitrix_type": "int_user"},
     )
     created_by_id: int = Field(
         ...,
         validation_alias=AliasChoices("CREATED_BY_ID", "createdBy"),
+        json_schema_extra={"bitrix_type": "int_user"},
     )
     modify_by_id: int = Field(
         ...,
         validation_alias=AliasChoices("MODIFY_BY_ID", "updatedBy"),
+        json_schema_extra={"bitrix_type": "int_user"},
     )
     last_activity_by: int | None = Field(
         None,
         validation_alias=AliasChoices("LAST_ACTIVITY_BY", "lastActivityBy"),
+        json_schema_extra={"bitrix_type": "int_none"},
     )
 
 
@@ -315,86 +343,213 @@ class UserRelationsUpdateMixin:
     assigned_by_id: int | None = Field(
         None,
         validation_alias=AliasChoices("ASSIGNED_BY_ID", "assignedById"),
+        json_schema_extra={"bitrix_type": "int_user"},
     )
     created_by_id: int | None = Field(
         None,
         validation_alias=AliasChoices("CREATED_BY_ID", "createdBy"),
+        json_schema_extra={"bitrix_type": "int_user"},
     )
     modify_by_id: int | None = Field(
         None,
         validation_alias=AliasChoices("MODIFY_BY_ID", "updatedBy"),
+        json_schema_extra={"bitrix_type": "int_user"},
     )
     last_activity_by: int | None = Field(
         None,
         validation_alias=AliasChoices("LAST_ACTIVITY_BY", "lastActivityBy"),
+        json_schema_extra={"bitrix_type": "int_none"},
     )
 
 
 class MarketingMixinUTM:
     """Миксин для маркетинговых полей"""
 
-    utm_source: str | None = Field(None, alias="UTM_SOURCE")
-    utm_medium: str | None = Field(None, alias="UTM_MEDIUM")
-    utm_campaign: str | None = Field(None, alias="UTM_CAMPAIGN")
-    utm_content: str | None = Field(None, alias="UTM_CONTENT")
-    utm_term: str | None = Field(None, alias="UTM_TERM")
+    utm_source: str | None = Field(
+        None,
+        alias="UTM_SOURCE",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    utm_medium: str | None = Field(
+        None,
+        alias="UTM_MEDIUM",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    utm_campaign: str | None = Field(
+        None,
+        alias="UTM_CAMPAIGN",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    utm_content: str | None = Field(
+        None,
+        alias="UTM_CONTENT",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    utm_term: str | None = Field(
+        None,
+        alias="UTM_TERM",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
 
 
 class AddressMixin:
     """Миксин для адресных полей"""
 
-    address: str | None = Field(None, alias="ADDRESS")
-    address_2: str | None = Field(None, alias="ADDRESS_2")
-    address_city: str | None = Field(None, alias="ADDRESS_CITY")
-    address_postal_code: str | None = Field(None, alias="ADDRESS_POSTAL_CODE")
-    address_region: str | None = Field(None, alias="ADDRESS_REGION")
-    address_province: str | None = Field(None, alias="ADDRESS_PROVINCE")
-    address_country: str | None = Field(None, alias="ADDRESS_COUNTRY")
-    address_country_code: str | None = Field(
-        None, alias="ADDRESS_COUNTRY_CODE"
+    address: str | None = Field(
+        None,
+        alias="ADDRESS",
+        json_schema_extra={"bitrix_type": "str_none"},
     )
-    address_loc_addr_id: int | None = Field(None, alias="ADDRESS_LOC_ADDR_ID")
+    address_2: str | None = Field(
+        None,
+        alias="ADDRESS_2",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_city: str | None = Field(
+        None,
+        alias="ADDRESS_CITY",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_postal_code: str | None = Field(
+        None,
+        alias="ADDRESS_POSTAL_CODE",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_region: str | None = Field(
+        None,
+        alias="ADDRESS_REGION",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_province: str | None = Field(
+        None,
+        alias="ADDRESS_PROVINCE",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_country: str | None = Field(
+        None,
+        alias="ADDRESS_COUNTRY",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_country_code: str | None = Field(
+        None,
+        alias="ADDRESS_COUNTRY_CODE",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    address_loc_addr_id: int | None = Field(
+        None,
+        alias="ADDRESS_LOC_ADDR_ID",
+        json_schema_extra={"bitrix_type": "int_none"},
+    )
 
 
 class CallTrackingMixin:
     """Миксин для полей коллтрекинга (MGO, Calltouch)."""
 
-    mgo_cc_entry_id: str | None = Field(None)
-    mgo_cc_channel_type: str | None = Field(None)
-    mgo_cc_result: str | None = Field(None)
-    mgo_cc_entry_point: str | None = Field(None)
-    mgo_cc_create: datetime | None = Field(None)
-    mgo_cc_end: datetime | None = Field(None)
-    mgo_cc_tag_id: str | None = Field(None)
-    calltouch_site_id: str | None = Field(None)
-    calltouch_call_id: str | None = Field(None)
-    calltouch_request_id: str | None = Field(None)
+    mgo_cc_entry_id: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    mgo_cc_channel_type: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    mgo_cc_result: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    mgo_cc_entry_point: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    mgo_cc_create: datetime | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "datetime_none"},
+    )
+    mgo_cc_end: datetime | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "datetime_none"},
+    )
+    mgo_cc_tag_id: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    calltouch_site_id: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    calltouch_call_id: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    calltouch_request_id: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
 
 
 class SocialProfilesMixin:
     """Миксин для полей социальных профилей."""
 
-    wz_instagram: str | None = Field(None)
-    wz_vc: str | None = Field(None)
-    wz_telegram_username: str | None = Field(None)
-    wz_telegram_id: str | None = Field(None)
-    wz_avito: str | None = Field(None)
+    wz_instagram: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    wz_vc: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    wz_telegram_username: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    wz_telegram_id: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    wz_avito: str | None = Field(
+        None,
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
 
 
 class HasCommunicationCreateMixin:
     """Присутствуют ли коммуникации при создании."""
 
-    has_phone: bool = Field(..., alias="HAS_PHONE")
-    has_email: bool = Field(..., alias="HAS_EMAIL")
-    has_imol: bool = Field(..., alias="HAS_IMOL")
+    has_phone: bool = Field(
+        ...,
+        alias="HAS_PHONE",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
+    has_email: bool = Field(
+        ...,
+        alias="HAS_EMAIL",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
+    has_imol: bool = Field(
+        ...,
+        alias="HAS_IMOL",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
 
 
 class HasCommunicationUpdateMixin:
     """Присутствуют ли коммуникации при обновлении (опционально)."""
 
-    has_phone: bool | None = Field(None, alias="HAS_PHONE")
-    has_email: bool | None = Field(None, alias="HAS_EMAIL")
-    has_imol: bool | None = Field(None, alias="HAS_IMOL")
+    has_phone: bool | None = Field(
+        None,
+        alias="HAS_PHONE",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
+    has_email: bool | None = Field(
+        None,
+        alias="HAS_EMAIL",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
+    has_imol: bool | None = Field(
+        None,
+        alias="HAS_IMOL",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
 
 
 # ===== Базовые схемы для создания/обновления =====
@@ -415,7 +570,11 @@ class BaseCreateSchema(
 ):
     """Базовая схема для создания сущностей."""
 
-    opened: bool = Field(default=True, alias="OPENED")
+    opened: bool = Field(
+        default=True,
+        alias="OPENED",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
 
 
 class CoreUpdateSchema(
@@ -433,19 +592,8 @@ class BaseUpdateSchema(
 ):
     """Базовая схема для обновления сущностей"""
 
-    opened: bool | None = Field(default=None, alias="OPENED")
-
-
-class CommunicationChannel(BaseModel):
-    """Схема канала связи (телефон, email, веб, IM и т.п.)."""
-
-    external_id: int | None = Field(None, alias="ID")
-    type_id: str | None = Field(None, alias="TYPE_ID")
-    value_type: str = Field(..., alias="VALUE_TYPE")
-    value: str = Field(..., alias="VALUE")
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        arbitrary_types_allowed=True,
-        extra="ignore",
+    opened: bool | None = Field(
+        default=None,
+        alias="OPENED",
+        json_schema_extra={"bitrix_type": "bool_yn"},
     )

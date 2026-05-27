@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import Field, field_validator
 
@@ -10,10 +10,10 @@ from .base_schemas import (
     AddressMixin,
     BaseCreateSchema,
     BaseUpdateSchema,
-    CommunicationChannel,
     HasCommunicationCreateMixin,
     HasCommunicationUpdateMixin,
 )
+from .mixins import CommunicationChannel
 
 
 # ===== Константы =====
@@ -29,23 +29,67 @@ class BaseContact:
     """
 
     # Идентификаторы и основные данные
-    name: str | None = Field(None, alias="NAME")
-    second_name: str | None = Field(None, alias="SECOND_NAME")
-    last_name: str | None = Field(None, alias="LAST_NAME")
-    post: str | None = Field(None, alias="POST")
+    name: str | None = Field(
+        None,
+        alias="NAME",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    second_name: str | None = Field(
+        None,
+        alias="SECOND_NAME",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    last_name: str | None = Field(
+        None,
+        alias="LAST_NAME",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    post: str | None = Field(
+        None,
+        alias="POST",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
 
     # Статусы и флаги
-    export: bool | None = Field(None, alias="EXPORT")
-    origin_version: str | None = Field(None, alias="ORIGIN_VERSION")
+    export: bool | None = Field(
+        None,
+        alias="EXPORT",
+        json_schema_extra={"bitrix_type": "bool_yn"},
+    )
+    origin_version: str | None = Field(
+        None,
+        alias="ORIGIN_VERSION",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
 
     # Временные метки
-    birthdate: datetime | None = Field(None, alias="BIRTHDATE")
+    birthdate: datetime | None = Field(
+        None,
+        alias="BIRTHDATE",
+        json_schema_extra={"bitrix_type": "datetime_none"},
+    )
 
     # Связи с другими сущностями
-    type_id: str | None = Field(None, alias="TYPE_ID")
-    company_id: int | None = Field(None, alias="COMPANY_ID")
-    lead_id: int | None = Field(None, alias="LEAD_ID")
-    source_id: str | None = Field(None, alias="SOURCE_ID")
+    type_id: str | None = Field(
+        None,
+        alias="TYPE_ID",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
+    company_id: int | None = Field(
+        None,
+        alias="COMPANY_ID",
+        json_schema_extra={"bitrix_type": "int_none"},
+    )
+    lead_id: int | None = Field(
+        None,
+        alias="LEAD_ID",
+        json_schema_extra={"bitrix_type": "int_none"},
+    )
+    source_id: str | None = Field(
+        None,
+        alias="SOURCE_ID",
+        json_schema_extra={"bitrix_type": "str_none"},
+    )
 
     # Коммуникации
     phone: list[CommunicationChannel] | None = Field(None, alias="PHONE")
@@ -79,6 +123,29 @@ class ContactCreate(
     Объединяет базовые поля контакта, миксины адреса, коммуникаций,
     а также добавляет служебные поля (даты создания, создателя и т.д.).
     """
+
+    EXTRA_FIELDS: ClassVar[dict[str, dict[str, str]]] = {
+        "honorific": {
+            "alias": "HONORIFIC",
+            "type": "str_none",
+            "comment": "Обращение",
+        },
+        "photo": {
+            "alias": "PHOTO",
+            "type": "dict_none",
+            "comment": "Фотография",
+        },
+        "id_article_knowledge_base": {
+            "alias": "UF_CRM_CONTACT_ITS_ARTICLE_ID",
+            "type": "str_none",
+            "comment": "ID статьи в Базе Знаний",
+        },
+        "business": {
+            "alias": "UF_CRM_1779861791",
+            "type": "str_none",
+            "comment": "Список дел",
+        },
+    }
 
     @classmethod
     def get_default_entity(cls, external_id: int | str) -> "ContactCreate":

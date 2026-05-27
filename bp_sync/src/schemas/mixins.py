@@ -18,7 +18,6 @@ from core.exceptions.schemas import (
     FieldComparisonError,
 )
 from core.logger import logger
-from models.communications import CommunicationChannel
 
 from .bitrix_validators import BitrixValidators
 
@@ -33,10 +32,25 @@ from .fields import (
 CURRENCY = "KZT"
 
 
+class CommunicationChannel(BaseModel):
+    """Схема канала связи (телефон, email, веб, IM и т.п.)."""
+
+    external_id: int | None = Field(None, alias="ID")
+    type_id: str | None = Field(None, alias="TYPE_ID")
+    value_type: str = Field(..., alias="VALUE_TYPE")
+    value: str = Field(..., alias="VALUE")
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        extra="ignore",
+    )
+
+
 class DataMappingMixin(BaseModel):
     # Константа для полей, исключаемых из сравнения
     EXCLUDED_FIELDS: ClassVar[set[str]] = EXCLUDED_CHANGES_FIELDS
-    EXTRA_FIELDS_BY_TYPE: ClassVar[dict[str, list[str]]] = {}
+    EXTRA_FIELDS: ClassVar[dict[str, dict[str, str]]] = {}
     FIELDS_BY_TYPE: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE
     FIELDS_BY_TYPE_ALT: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE_ALT
 
@@ -46,8 +60,20 @@ class DataMappingMixin(BaseModel):
         # __pydantic_extra__ автоматически заполняется Pydantic при
         # extra="allow"
         if hasattr(self, "__pydantic_extra__") and self.__pydantic_extra__:
+            transform_extra_fields = {}
+            new_extra_fields = {}
+            for key, value in self.EXTRA_FIELDS.items():
+                transform_extra_fields[value["alias"]] = {
+                    "name": key,
+                    "type": value["type"],
+                }
             extra_fields = dict(self.__pydantic_extra__)
-            object.__setattr__(self, "extra_fields", extra_fields)
+            for key, value in extra_fields.items():
+                if key in transform_extra_fields:
+                    new_extra_fields[transform_extra_fields[key]["name"]] = (
+                        value
+                    )
+            object.__setattr__(self, "extra_fields", new_extra_fields)
             # Очищаем __pydantic_extra__ чтобы не дублировать данные
             object.__setattr__(self, "__pydantic_extra__", {})
         return self
@@ -242,9 +268,7 @@ class DataMappingMixin(BaseModel):
     @model_validator(mode="before")  # pyright: ignore[misc]
     @classmethod
     def preprocess_data(cls, data: Any) -> Any:
-        return BitrixValidators.normalize_empty_values(
-            data, fields=cls.FIELDS_BY_TYPE
-        )
+        return BitrixValidators.normalize_data(data, schema_class=cls)
 
     def model_dump_db(self, exclude_unset: bool = False) -> dict[str, Any]:
         data = self.model_dump(exclude_unset=exclude_unset)

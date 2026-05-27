@@ -54,7 +54,7 @@ async def simple_page(
 #     ],
 # ) -> SuccessResponse:
 
-#     client = await contact_bitrix_client.get(2)
+#     client = await contact_bitrix_client.get(34)
 #     # await contact_bitrix_client.bitrix_client.oauth_client.
 #     #     token_storage.delete_token("access_token")
 #     # await contact_bitrix_client.bitrix_client.oauth_client.

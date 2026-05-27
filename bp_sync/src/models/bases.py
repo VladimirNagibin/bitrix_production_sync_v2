@@ -18,7 +18,8 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar, cast
 
-from sqlalchemy import DateTime, ForeignKey
+from sqlalchemy import DateTime, ForeignKey, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import (
     Mapped,
@@ -62,6 +63,13 @@ class IntIdEntity(Base):
     external_id: Mapped[int] = mapped_column(
         unique=True,
         comment="ID во внешней системе",
+    )
+    extra_fields: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+
+    __table_args__ = (
+        Index("idx_extra_fields_gin", extra_fields, postgresql_using="gin"),
     )
 
     # ----- Методы определения класса схемы -----
@@ -233,6 +241,13 @@ class NameStrIdEntity(Base):
         comment="ID во внешней системе",
     )
     name: Mapped[str] = mapped_column(comment="Название")
+    extra_fields: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
+
+    __table_args__ = (
+        Index("idx_extra_fields_gin", extra_fields, postgresql_using="gin"),
+    )
 
     def __str__(self) -> str:
         return str(self.name)
