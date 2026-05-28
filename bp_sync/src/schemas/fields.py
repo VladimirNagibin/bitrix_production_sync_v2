@@ -1,14 +1,6 @@
 from typing import Any
 
 
-EXCLUDED_CHANGES_FIELDS: set[str] = {
-    "internal_id",
-    "created_at",
-    "updated_at",
-    "is_deleted",
-    "moved_date",
-}
-
 FIELDS_BY_TYPE: dict[str, Any] = {
     "str": [
         # deal

@@ -36,22 +36,34 @@ class CommonFieldMixin(DataMappingMixin):
         init_var=False,
         description="Внутренний UUID идентификатор",
         examples=["123e4567-e89b-12d3-a456-426614174000"],
-        json_schema_extra={"exclude_from_bitrix": True},
+        json_schema_extra={
+            "exclude_from_bitrix": True,
+            "exclude_from_comparison": True,
+        },
     )
     created_at: datetime | None = Field(
         default=None,
         description="Дата и время создания записи",
-        json_schema_extra={"exclude_from_bitrix": True},
+        json_schema_extra={
+            "exclude_from_bitrix": True,
+            "exclude_from_comparison": True,
+        },
     )
     updated_at: datetime | None = Field(
         default=None,
         description="Дата и время последнего обновления",
-        json_schema_extra={"exclude_from_bitrix": True},
+        json_schema_extra={
+            "exclude_from_bitrix": True,
+            "exclude_from_comparison": True,
+        },
     )
     is_deleted: bool | None = Field(
         default=None,
         description="Флаг удаления",
-        json_schema_extra={"exclude_from_bitrix": True},
+        json_schema_extra={
+            "exclude_from_bitrix": True,
+            "exclude_from_comparison": True,
+        },
     )
     external_id: int | str | None = Field(
         default=None,

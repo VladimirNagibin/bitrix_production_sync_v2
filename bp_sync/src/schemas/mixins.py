@@ -23,7 +23,6 @@ from .bitrix_validators import BitrixValidators
 
 # from .enums import CURRENCY
 from .fields import (
-    EXCLUDED_CHANGES_FIELDS,
     FIELDS_BY_TYPE,
     FIELDS_BY_TYPE_ALT,
 )
@@ -48,9 +47,8 @@ class CommunicationChannel(BaseModel):
 
 
 class DataMappingMixin(BaseModel):
-    # Константа для полей, исключаемых из сравнения
-    EXCLUDED_FIELDS: ClassVar[set[str]] = EXCLUDED_CHANGES_FIELDS
     EXTRA_FIELDS: ClassVar[dict[str, dict[str, str]]] = {}
+
     FIELDS_BY_TYPE: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE
     FIELDS_BY_TYPE_ALT: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE_ALT
 
@@ -60,8 +58,8 @@ class DataMappingMixin(BaseModel):
         # __pydantic_extra__ автоматически заполняется Pydantic при
         # extra="allow"
         if hasattr(self, "__pydantic_extra__") and self.__pydantic_extra__:
-            transform_extra_fields = {}
-            new_extra_fields = {}
+            transform_extra_fields: dict[str, dict[str, str]] = {}
+            new_extra_fields: dict[str, Any] = {}
             for key, value in self.EXTRA_FIELDS.items():
                 transform_extra_fields[value["alias"]] = {
                     "name": key,
@@ -69,10 +67,17 @@ class DataMappingMixin(BaseModel):
                 }
             extra_fields = dict(self.__pydantic_extra__)
             for key, value in extra_fields.items():
-                if key in transform_extra_fields:
-                    new_extra_fields[transform_extra_fields[key]["name"]] = (
-                        value
-                    )
+                try:
+                    if key in transform_extra_fields:
+                        field_name = transform_extra_fields[key]["name"]
+                        field_type = transform_extra_fields[key]["type"]
+                        new_extra_fields[field_name] = (
+                            BitrixValidators.apply_field_transformer(
+                                field_name, value, field_type
+                            )
+                        )
+                except Exception as e:  # noqa: BLE001
+                    logger.error(f"Error during transform extra fields: {e}")
             object.__setattr__(self, "extra_fields", new_extra_fields)
             # Очищаем __pydantic_extra__ чтобы не дублировать данные
             object.__setattr__(self, "__pydantic_extra__", {})
@@ -82,7 +87,7 @@ class DataMappingMixin(BaseModel):
     def get_changes(
         self,
         entity: Self | None,
-        exclude_fields: set[str] | None = None,
+        # exclude_fields: set[str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """
         Сравнивает текущую сущность с другой и возвращает различия.
@@ -115,16 +120,19 @@ class DataMappingMixin(BaseModel):
             f"Comparing entities: {self.__class__.__name__} "
             f"(ID: {internal_id})"
         )
-        if exclude_fields is None:
-            exclude_fields = self.EXCLUDED_FIELDS
 
         differences: dict[str, dict[str, Any]] = {}
 
         model_class = self.__class__
-        fields = model_class.model_fields
 
-        for field_name in fields:
-            if field_name in exclude_fields:
+        for field_name, field_info in model_class.model_fields.items():
+            exclude_from_comparison = self._get_json_extra_value(
+                field_info, "exclude_from_comparison"
+            )
+            if (
+                exclude_from_comparison is not None
+                and exclude_from_comparison
+            ):
                 continue
             try:
                 old_value = getattr(self, field_name)
@@ -168,6 +176,17 @@ class DataMappingMixin(BaseModel):
         return differences
 
     # ----- Вспомогательные методы сравнения -----
+    def _get_json_extra_value(
+        self, field_info: Any, field_name: str
+    ) -> str | None:
+        """
+        Извлекает значение 'field_name' из json_schema_extra поля.
+        """
+        json_extra = field_info.json_schema_extra
+        if isinstance(json_extra, dict):
+            return cast("dict[str, Any]", json_extra).get(field_name)
+        return None
+
     def _are_values_equal(
         self,
         field_name: str,

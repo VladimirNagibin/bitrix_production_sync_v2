@@ -117,7 +117,7 @@ class BitrixValidators:
                     continue
 
                 # Применяем трансформер
-                result[field_name] = cls._apply_field_transformer(
+                result[field_name] = cls.apply_field_transformer(
                     field_name, value, bitrix_type
                 )
             except BitrixValidationError:
@@ -169,6 +169,32 @@ class BitrixValidators:
             logger.warning("Failed to parse numeric string: %r", value)
             return None
 
+    @staticmethod
+    def apply_field_transformer(
+        field_name: str,
+        value: Any,
+        bitrix_type: str,
+    ) -> Any:
+        """Находит и применяет трансформер согласно bitrix_type."""
+        transformer = BitrixValidators._TRANSFORMERS.get(bitrix_type)
+        if not transformer:
+            return value
+
+        try:
+            return transformer(value)
+        except BitrixValidationError:
+            raise
+        except Exception as e:
+            logger.error(
+                f"Transformer '{bitrix_type}' failed for field "
+                f"'{field_name}': {e!s}"
+            )
+            raise BitrixParseError(
+                field_name=field_name,
+                value=value,
+                reason=f"Transformer error ({bitrix_type}): {e!s}",
+            ) from e
+
     # ----- Приватные вспомогательные методы -----
     @staticmethod
     def _remove_whitespace(text: str) -> str:
@@ -207,32 +233,6 @@ class BitrixValidators:
         if isinstance(json_extra, dict):
             return cast("dict[str, Any]", json_extra).get("bitrix_type")
         return None
-
-    @staticmethod
-    def _apply_field_transformer(
-        field_name: str,
-        value: Any,
-        bitrix_type: str,
-    ) -> Any:
-        """Находит и применяет трансформер согласно bitrix_type."""
-        transformer = BitrixValidators._TRANSFORMERS.get(bitrix_type)
-        if not transformer:
-            return value
-
-        try:
-            return transformer(value)
-        except BitrixValidationError:
-            raise
-        except Exception as e:
-            logger.error(
-                f"Transformer '{bitrix_type}' failed for field "
-                f"'{field_name}': {e!s}"
-            )
-            raise BitrixParseError(
-                field_name=field_name,
-                value=value,
-                reason=f"Transformer error ({bitrix_type}): {e!s}",
-            ) from e
 
     @staticmethod
     def _sanitize_user_id(value: Any) -> int:
