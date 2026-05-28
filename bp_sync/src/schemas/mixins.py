@@ -1,4 +1,3 @@
-from contextlib import suppress
 from datetime import datetime
 from enum import Enum
 from typing import Any, ClassVar, Self, cast
@@ -47,6 +46,7 @@ class CommunicationChannel(BaseModel):
 
 
 class DataMappingMixin(BaseModel):
+    # ----- Константы класса -----
     EXTRA_FIELDS: ClassVar[dict[str, dict[str, str]]] = {}
 
     FIELDS_BY_TYPE: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE
@@ -55,58 +55,74 @@ class DataMappingMixin(BaseModel):
     # ----- Валидаторы -----
     @model_validator(mode="after")
     def collect_extra_fields(self) -> "DataMappingMixin":
+        """
+        Собирает дополнительные поля из __pydantic_extra__,
+        преобразует их согласно конфигурации EXTRA_FIELDS.
+        """
         # __pydantic_extra__ автоматически заполняется Pydantic при
         # extra="allow"
-        if hasattr(self, "__pydantic_extra__") and self.__pydantic_extra__:
-            transform_extra_fields: dict[str, dict[str, str]] = {}
-            new_extra_fields: dict[str, Any] = {}
-            for key, value in self.EXTRA_FIELDS.items():
-                transform_extra_fields[value["alias"]] = {
-                    "name": key,
-                    "type": value["type"],
-                }
-            extra_fields = dict(self.__pydantic_extra__)
-            for key, value in extra_fields.items():
-                try:
-                    if key in transform_extra_fields:
-                        field_name = transform_extra_fields[key]["name"]
-                        field_type = transform_extra_fields[key]["type"]
-                        new_extra_fields[field_name] = (
-                            BitrixValidators.apply_field_transformer(
-                                field_name, value, field_type
-                            )
-                        )
-                except Exception as e:  # noqa: BLE001
-                    logger.error(f"Error during transform extra fields: {e}")
-            object.__setattr__(self, "extra_fields", new_extra_fields)
-            # Очищаем __pydantic_extra__ чтобы не дублировать данные
-            object.__setattr__(self, "__pydantic_extra__", {})
+        if (
+            not hasattr(self, "__pydantic_extra__")
+            or not self.__pydantic_extra__
+        ):
+            return self
+
+        # Маппинг: алиас → { "name": имя_поля, "type": тип_преобразования }
+        alias_to_field: dict[str, dict[str, str]] = {}
+        for internal_name, config in self.EXTRA_FIELDS.items():
+            alias_to_field[config["alias"]] = {
+                "name": internal_name,
+                "type": config["type"],
+            }
+
+        processed_extra: dict[str, Any] = {}
+
+        extra_fields = dict(self.__pydantic_extra__)
+        for alias, value in extra_fields.items():
+            field_config = alias_to_field.get(alias)
+            if field_config is None:
+                continue
+            field_name = field_config["name"]
+            field_type = field_config["type"]
+            try:
+                processed_extra[field_name] = (
+                    BitrixValidators.apply_field_transformer(
+                        field_name, value, field_type
+                    )
+                )
+
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    f"Failed to transform extra field '{field_name}': {e}"
+                )
+        # Устанавливаем результат и очищаем __pydantic_extra__
+        object.__setattr__(self, "extra_fields", processed_extra)
+        object.__setattr__(self, "__pydantic_extra__", {})
         return self
 
     # ----- Публичные методы -----
     def get_changes(
         self,
-        entity: Self | None,
-        # exclude_fields: set[str] | None = None,
+        entity: Self,
     ) -> dict[str, dict[str, Any]]:
         """
         Сравнивает текущую сущность с другой и возвращает различия.
 
         Args:
             entity: Сущность для сравнения
-            exclude_fields: Поля для исключения из сравнения
 
         Returns:
             Словарь с различиями в формате
             {поле: {internal: значение, external: значение}}
+
+        Raises:
+            ComparisonError: Если типы сущностей не совпадают.
 
         Example:
             >>> changes = old_entity.get_changes(new_entity)
             >>> print(changes)
             {'name': {'internal': 'Old', 'external': 'New'}}
         """
-        if entity is None:
-            raise ComparisonError(message="Comparison entity cannot be None")
 
         if not isinstance(entity, self.__class__):
             raise ComparisonError(
@@ -126,17 +142,21 @@ class DataMappingMixin(BaseModel):
         model_class = self.__class__
 
         for field_name, field_info in model_class.model_fields.items():
-            exclude_from_comparison = self._get_json_extra_value(
-                field_info, "exclude_from_comparison"
-            )
-            if (
-                exclude_from_comparison is not None
-                and exclude_from_comparison
-            ):
+            # Пропускаем поля, помеченные как исключённые из сравнения
+            if self._is_excluded_from_comparison(field_info):
                 continue
+
             try:
                 old_value = getattr(self, field_name)
                 new_value = getattr(entity, field_name)
+
+                if field_name == "extra_fields":
+                    diff_extra_fields = self._get_diff_extra_fields(
+                        old_value, new_value
+                    )
+                    if diff_extra_fields:
+                        differences.update(diff_extra_fields)
+                    continue
 
                 if not self._are_values_equal(
                     field_name, old_value, new_value
@@ -176,22 +196,62 @@ class DataMappingMixin(BaseModel):
         return differences
 
     # ----- Вспомогательные методы сравнения -----
-    def _get_json_extra_value(
-        self, field_info: Any, field_name: str
-    ) -> str | None:
+    def _is_excluded_from_comparison(self, field_info: Any) -> bool:
         """
-        Извлекает значение 'field_name' из json_schema_extra поля.
+        Проверяет, помечено ли поле как исключаемое из сравнения.
+        """
+        exclude_flag = self._get_json_extra_value(
+            field_info, "exclude_from_comparison"
+        )
+        return exclude_flag is True
+
+    def _get_json_extra_value(self, field_info: Any, field_name: str) -> Any:
+        """
+        Извлекает значение из json_schema_extra поля по ключу.
         """
         json_extra = field_info.json_schema_extra
         if isinstance(json_extra, dict):
             return cast("dict[str, Any]", json_extra).get(field_name)
         return None
 
+    def _get_diff_extra_fields(
+        self, old: Any, new: Any
+    ) -> dict[str, dict[str, Any]] | None:
+        """
+        Сравнивает два словаря extra_fields и возвращает различия.
+        """
+        if not isinstance(old, dict) or not isinstance(new, dict):
+            return None
+
+        # Приводим типы для статического анализа
+        old_dict: dict[str, Any] = cast("dict[str, Any]", old)
+        new_dict: dict[str, Any] = cast("dict[str, Any]", new)
+
+        differences: dict[str, dict[str, Any]] = {}
+
+        # Ключи, которые есть в old, но отсутствуют или отличаются в new
+        for key, old_val in old_dict.items():
+            if key not in new:
+                differences[key] = {"internal": old_val, "external": None}
+                logger.debug(
+                    f"Extra field '{key}' removed: {old_val} -> None"
+                )
+            elif not self._are_values_equal(key, old_val, new[key]):
+                differences[key] = {"internal": old_val, "external": new[key]}
+                logger.debug(
+                    f"Extra field '{key}' changed: {old_val} -> {new[key]}"
+                )
+
+        # Ключи, которые появились в new
+        for key, new_val in new_dict.items():
+            if key not in old:
+                differences[key] = {"internal": None, "external": new_val}
+                logger.debug(f"Extra field '{key}' added: None -> {new_val}")
+
+        return differences if differences else None
+
     def _are_values_equal(
-        self,
-        field_name: str,
-        value1: Any,
-        value2: Any,
+        self, field_name: str, value1: Any, value2: Any
     ) -> bool:
         """
         Сравнивает два значения с учетом специальных типов данных.
@@ -207,15 +267,12 @@ class DataMappingMixin(BaseModel):
         # Оба значения None
         if value1 is None and value2 is None:
             return True
-
         # Проверка специальных полей (например, company_id)
         if self._handle_special_fields(field_name, value1, value2):
             return True
-
         # Одно из значений None
         if value1 is None or value2 is None:
             return False
-
         # Сравнение в зависимости от типов
         return self._compare_by_type(field_name, value1, value2)
 
@@ -231,7 +288,7 @@ class DataMappingMixin(BaseModel):
         if isinstance(value1, Enum) and isinstance(value2, Enum):
             return bool(value1.value == value2.value)
 
-        # Оба значения — Pydantic-модели → рекурсивное сравнение через дамп
+        # Pydantic-модели
         if isinstance(value1, BaseModel) and isinstance(value2, BaseModel):
             return value1.model_dump() == value2.model_dump()
 
@@ -270,7 +327,6 @@ class DataMappingMixin(BaseModel):
         handler = special_handlers.get(field_name)
         if handler is None:
             return False
-
         try:
             return bool(handler(value1, value2))
         except Exception as e:  # noqa: BLE001
@@ -290,37 +346,46 @@ class DataMappingMixin(BaseModel):
         return BitrixValidators.normalize_data(data, schema_class=cls)
 
     def model_dump_db(self, exclude_unset: bool = False) -> dict[str, Any]:
+        data_dump: dict[str, Any] = {}
         data = self.model_dump(exclude_unset=exclude_unset)
-        for key in self.FIELDS_BY_TYPE_ALT.get("list", []):
-            with suppress(KeyError):
-                del data[key]
-        for key in self.FIELDS_BY_TYPE_ALT.get("dict_none_str", []):
-            with suppress(KeyError):
-                del data[key]
-        for key in self.FIELDS_BY_TYPE_ALT.get("dict_none_dict", []):
-            with suppress(KeyError):
-                del data[key]
-        for key, value in data.items():
-            if (
-                key in self.FIELDS_BY_TYPE_ALT.get("str_none", [])
-                and not value
-            ) or (
-                key in self.FIELDS_BY_TYPE_ALT.get("int_none", [])
-                and (value is None or not int(value))
-            ):
-                data[key] = None
+        model_class = self.__class__
+        for field_name, value in data.items():
+            field_info = model_class.model_fields[field_name]
+            # Пропускаем поля, помеченные как исключённые из сравнения
+            if self._is_excluded_from_db(field_info):
+                continue  # list, dict_none_str, dict_none_dict
+            bitrix_type = self._get_json_extra_value(
+                field_info, "bitrix_type"
+            )
+            if bitrix_type in ("str_none", "int_none"):
+                if not value:
+                    data_dump[field_name] = None
+                else:
+                    data_dump[field_name] = value
+                continue
+            data_dump[field_name] = value
 
-            elif key in self.FIELDS_BY_TYPE_ALT.get("dict_none_str", []):
-                if value is None:
-                    data[key] = None
-                else:
-                    data[key] = value["value"]
-            elif key in self.FIELDS_BY_TYPE_ALT.get("dict_none_dict", []):
-                if value is None:
-                    data[key] = None
-                else:
-                    data[key] = value["value"]["text_field"]
-        return data  # pyright: ignore[no-any-return]
+            # elif key in self.FIELDS_BY_TYPE_ALT.get("dict_none_str", []):
+            #     if value is None:
+            #         data[key] = None
+            #     else:
+            #         data[key] = value["value"]
+            # elif key in self.FIELDS_BY_TYPE_ALT.get("dict_none_dict", []):
+            #     if value is None:
+            #         data[key] = None
+            #     else:
+            #         data[key] = value["value"]["text_field"]
+        return data_dump
+
+    # ----- Вспомогательные методы -----
+    def _is_excluded_from_db(self, field_info: Any) -> bool:
+        """
+        Проверяет, помечено ли поле как исключаемое из выгрузки в db.
+        """
+        exclude_flag = self._get_json_extra_value(
+            field_info, "exclude_from_db"
+        )
+        return exclude_flag is True
 
     # Константы для преобразований
     _BOOLEAN_FIELDS_TO_STRING: ClassVar[set[str]] = {

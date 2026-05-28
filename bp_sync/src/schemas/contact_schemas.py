@@ -92,11 +92,21 @@ class BaseContact:
     )
 
     # Коммуникации
-    phone: list[CommunicationChannel] | None = Field(None, alias="PHONE")
-    email: list[CommunicationChannel] | None = Field(None, alias="EMAIL")
-    web: list[CommunicationChannel] | None = Field(None, alias="WEB")
-    im: list[CommunicationChannel] | None = Field(None, alias="IM")
-    link: list[CommunicationChannel] | None = Field(None, alias="LINK")
+    phone: list[CommunicationChannel] | None = Field(
+        None, alias="PHONE", json_schema_extra={"exclude_from_db": True}
+    )
+    email: list[CommunicationChannel] | None = Field(
+        None, alias="EMAIL", json_schema_extra={"exclude_from_db": True}
+    )
+    web: list[CommunicationChannel] | None = Field(
+        None, alias="WEB", json_schema_extra={"exclude_from_db": True}
+    )
+    im: list[CommunicationChannel] | None = Field(
+        None, alias="IM", json_schema_extra={"exclude_from_db": True}
+    )
+    link: list[CommunicationChannel] | None = Field(
+        None, alias="LINK", json_schema_extra={"exclude_from_db": True}
+    )
 
     @field_validator("external_id", mode="before")  # pyright: ignore[misc]
     @classmethod
