@@ -1,8 +1,20 @@
-from datetime import datetime
-from enum import Enum
-from typing import Any, ClassVar, Self, cast
-from uuid import UUID
+from __future__ import annotations
 
+import json
+import threading
+
+from enum import Enum
+from types import MappingProxyType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Self,
+    TypedDict,
+    cast,
+)
+
+# from uuid import UUID
 from pydantic import (
     AliasChoices,
     BaseModel,
@@ -10,8 +22,8 @@ from pydantic import (
     Field,
     model_validator,
 )
-from pydantic.fields import FieldInfo
 
+from core import settings
 from core.exceptions.schemas import (
     ComparisonError,
     FieldComparisonError,
@@ -20,14 +32,19 @@ from core.logger import logger
 
 from .bitrix_validators import BitrixValidators
 
-# from .enums import CURRENCY
-from .fields import (
-    FIELDS_BY_TYPE,
-    FIELDS_BY_TYPE_ALT,
-)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from datetime import datetime
+
+    from pydantic.fields import FieldInfo
 
 
-CURRENCY = "KZT"
+# ===== Конфигурация типов для extra_fields =====
+class FieldConfig(TypedDict):
+    alias: str
+    type: str
+    comment: str
 
 
 class CommunicationChannel(BaseModel):
@@ -45,19 +62,212 @@ class CommunicationChannel(BaseModel):
     )
 
 
-class DataMappingMixin(BaseModel):
-    # ----- Константы класса -----
-    EXTRA_FIELDS: ClassVar[dict[str, dict[str, str]]] = {}
+class FieldText(BaseModel):
+    """Текстовое поле с возможностью указания типа (HTML/TEXT)."""
 
-    FIELDS_BY_TYPE: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE
-    FIELDS_BY_TYPE_ALT: ClassVar[dict[str, Any]] = FIELDS_BY_TYPE_ALT
+    text_field: str | None = Field(
+        None, validation_alias=AliasChoices("TEXT", "text")
+    )  # TEXT
+    type_field: str | None = Field(
+        "HTML", validation_alias=AliasChoices("TYPE", "type")
+    )  # TYPE (HTML/TEXT)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    def to_bitrix_dict(self, alias_choice: int) -> dict[str, Any]:
+        """
+        Преобразует модель в словарь для Bitrix API.
+        """
+        result: dict[str, Any] = {}
+
+        for field_name, field_info in self.__class__.model_fields.items():
+            value = getattr(self, field_name, None)
+            if value is None:
+                continue
+
+            # Получаем финальный алиас для поля на основе alias_choice
+            field_alias = self._get_field_alias(field_info, alias_choice)
+
+            result[field_alias] = value
+
+        return result
+
+    def _get_field_alias(
+        self, field_info: FieldInfo, alias_choice: int
+    ) -> str:
+        """
+        Возвращает алиас поля с учётом выбранной схемы.
+        """
+        validation_alias = field_info.validation_alias
+        if isinstance(validation_alias, AliasChoices):
+            # Безопасный выбор алиаса с проверкой границ
+            choice_index = max(
+                0, min(alias_choice - 1, len(validation_alias.choices) - 1)
+            )
+            return validation_alias.choices[choice_index]  # type: ignore
+
+        # Если AliasChoices не используется, пробуем получить обычный алиас
+        return field_info.alias or field_info.name  # type: ignore
+
+
+class FieldValue(BaseModel):
+    value_id: int | None = Field(None, alias="valueId")  # id value
+    value: str | FieldText = Field(..., alias="value")  # value
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def text(self) -> str | None:
+        """
+        Возвращает текстовое значение вне зависимости от типа поля value.
+        """
+        content = self.value
+        if isinstance(content, str):
+            return content
+        return content.text_field
+
+
+class DataMappingMixin(BaseModel):
+    """
+    Миксин для маппинга данных между Pydantic‑моделями, Bitrix24 и БД.
+    Обеспечивает ленивую загрузку конфигурации дополнительных полей.
+    """
+
+    # ----- Конфигурация (переопределяется в наследниках) -----
+    EXTRA_FIELDS_FILENAME: ClassVar[str] = ""
+
+    # ----- Приватные кеши (раздельные для каждого класса) -----
+    _extra_fields_cache: ClassVar[dict[str, FieldConfig] | None] = None
+    _extra_fields_loaded: ClassVar[bool] = False
+    _extra_fields_lock: ClassVar[threading.Lock] = threading.Lock()
+
+    # ----- Публичный метод доступа к конфигурации -----
+    @classmethod
+    def get_extra_fields(cls) -> dict[str, FieldConfig]:
+        """
+        Возвращает конфигурацию дополнительных полей, загружая её при первом
+        вызове.
+        """
+        if not cls._extra_fields_loaded:
+            with cls._extra_fields_lock:
+                if not cls._extra_fields_loaded:  # Double-check
+                    cls._load_extra_fields()
+        return cls._extra_fields_cache or {}
+
+    @property
+    def extra_fields_config(self) -> dict[str, FieldConfig]:
+        """Удобный доступ к конфигурации extra_fields через экземпляр."""
+        return self.get_extra_fields()
+
+    # Реестр трансформеров типов: bitrix_type -> функция обработки
+    _TRANSFORMERS: ClassVar[MappingProxyType[str, Callable[[Any], Any]]] = (
+        MappingProxyType(
+            {
+                "str_none": lambda v: v if v else "",
+                "int_none": lambda v: "" if not v or v == "0" else v,
+                "int_user": lambda v: "" if not v or v == "0" else v,
+                "bool_yn": lambda v: "Y" if v else "N",
+                "bool_none_yn": (
+                    lambda v: "Y"
+                    if v is True
+                    else ("N" if v is False else "")
+                ),
+                "bool_10": lambda v: "1" if v else "0",
+                "bool_none_10": (
+                    lambda v: "1"
+                    if v is True
+                    else ("0" if v is False else "")
+                ),
+                "datetime": (lambda v: DataMappingMixin._format_datetime(v)),
+                "datetime_none": (
+                    lambda v: DataMappingMixin._format_datetime(v)
+                ),
+                "datetime_alt_none": (
+                    lambda v: v.strftime("%d.%m.%Y %H:%M:%S") if v else ""
+                ),
+                "money": lambda v: DataMappingMixin._format_money(v),
+            }
+        )
+    )
+
+    # ----- Автоматическая инициализация подклассов -----
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Вызывается автоматически при создании подкласса."""
+        super().__init_subclass__(**kwargs)
+        # Инициализируем пер-класс переменные,
+        # чтобы не было "утечки" между наследниками
+        cls._extra_fields_cache = None
+        cls._extra_fields_loaded = False
+
+    # ----- Загрузка конфигурации из JSON -----
+    @classmethod
+    def _load_extra_fields(cls) -> None:
+        """
+        Загружает конфигурацию из JSON-файла, указанного в
+        EXTRA_FIELDS_FILENAME.
+        """
+        if cls._extra_fields_loaded:
+            return
+
+        filename = cls.EXTRA_FIELDS_FILENAME
+        if not filename:
+            logger.debug(f"{cls.__name__}: EXTRA_FIELDS_FILENAME not define")
+            cls._extra_fields_cache = {}
+            cls._extra_fields_loaded = True
+            return
+
+        file_path = settings.app.base_dir.parent / filename
+        if not file_path:
+            logger.warning(f"{cls.__name__}: config not found: {filename}")
+            cls._extra_fields_cache = {}
+            cls._extra_fields_loaded = True
+            return
+
+        try:
+            with file_path.open("r", encoding="utf-8") as f:
+                raw_config = json.load(f)
+
+            # Валидация и приведение типов
+            validated: dict[str, FieldConfig] = {}
+            required_keys = {"alias", "type", "comment"}
+            for key, value in raw_config.items():
+                if isinstance(value, dict) and required_keys <= value.keys():
+                    v = cast("dict[str, Any]", value)
+                    validated[key] = FieldConfig(
+                        alias=str(v["alias"]),
+                        type=str(v["type"]),
+                        comment=str(v["comment"]),
+                    )
+                else:
+                    logger.warning(
+                        f"{cls.__name__}: field '{key}' has invalid "
+                        "structure, skipping"
+                    )
+
+            cls._extra_fields_cache = validated
+            logger.info(
+                f"{cls.__name__}: loaded {len(validated)} extra fields from "
+                f"{file_path}"
+            )
+        except json.JSONDecodeError as e:
+            logger.error(
+                f"{cls.__name__}: JSON decode error in {file_path}: {e}"
+            )
+            cls._extra_fields_cache = {}
+        except Exception as e:  # noqa: BLE001
+            logger.exception(
+                f"{cls.__name__}: unexpected error loading config: {e}"
+            )
+            cls._extra_fields_cache = {}
+        finally:
+            cls._extra_fields_loaded = True  # Гарантируем флаг при ошибке
 
     # ----- Валидаторы -----
     @model_validator(mode="after")
-    def collect_extra_fields(self) -> "DataMappingMixin":
+    def collect_extra_fields(self) -> DataMappingMixin:
         """
-        Собирает дополнительные поля из __pydantic_extra__,
-        преобразует их согласно конфигурации EXTRA_FIELDS.
+        Обрабатывает дополнительные поля (__pydantic_extra__) и сохраняет их
+        в extra_fields.
         """
         # __pydantic_extra__ автоматически заполняется Pydantic при
         # extra="allow"
@@ -68,24 +278,24 @@ class DataMappingMixin(BaseModel):
             return self
 
         # Маппинг: алиас → { "name": имя_поля, "type": тип_преобразования }
-        alias_to_field: dict[str, dict[str, str]] = {}
-        for internal_name, config in self.EXTRA_FIELDS.items():
-            alias_to_field[config["alias"]] = {
+        alias_map: dict[str, dict[str, str]] = {}
+        for internal_name, config in self.extra_fields_config.items():
+            alias_map[config["alias"]] = {
                 "name": internal_name,
                 "type": config["type"],
             }
 
-        processed_extra: dict[str, Any] = {}
+        processed: dict[str, Any] = {}
 
         extra_fields = dict(self.__pydantic_extra__)
         for alias, value in extra_fields.items():
-            field_config = alias_to_field.get(alias)
-            if field_config is None:
+            field_config = alias_map.get(alias)
+            if not field_config:
                 continue
             field_name = field_config["name"]
             field_type = field_config["type"]
             try:
-                processed_extra[field_name] = (
+                processed[field_name] = (
                     BitrixValidators.apply_field_transformer(
                         field_name, value, field_type
                     )
@@ -96,20 +306,20 @@ class DataMappingMixin(BaseModel):
                     f"Failed to transform extra field '{field_name}': {e}"
                 )
         # Устанавливаем результат и очищаем __pydantic_extra__
-        object.__setattr__(self, "extra_fields", processed_extra)
+        object.__setattr__(self, "extra_fields", processed)
         object.__setattr__(self, "__pydantic_extra__", {})
         return self
 
     # ----- Публичные методы -----
     def get_changes(
         self,
-        entity: Self,
+        other: Self,
     ) -> dict[str, dict[str, Any]]:
         """
         Сравнивает текущую сущность с другой и возвращает различия.
 
         Args:
-            entity: Сущность для сравнения
+            other: Сущность для сравнения
 
         Returns:
             Словарь с различиями в формате
@@ -124,11 +334,11 @@ class DataMappingMixin(BaseModel):
             {'name': {'internal': 'Old', 'external': 'New'}}
         """
 
-        if not isinstance(entity, self.__class__):
+        if not isinstance(other, self.__class__):
             raise ComparisonError(
                 message=(
                     f"Expected entity of type {self.__class__.__name__}, "
-                    f"got {type(entity).__name__}"
+                    f"got {type(other).__name__}"
                 )
             )
         internal_id = getattr(self, "internal_id", "-")
@@ -148,7 +358,7 @@ class DataMappingMixin(BaseModel):
 
             try:
                 old_value = getattr(self, field_name)
-                new_value = getattr(entity, field_name)
+                new_value = getattr(other, field_name)
 
                 if field_name == "extra_fields":
                     diff_extra_fields = self._get_diff_extra_fields(
@@ -336,7 +546,8 @@ class DataMappingMixin(BaseModel):
             )
             return False
 
-    def _compare_company_id(self, value1: Any, value2: Any) -> bool:
+    @staticmethod
+    def _compare_company_id(value1: Any, value2: Any) -> bool:
         """Сравнивает значения company_id с учетом 0 и None."""
         return value1 in (0, None) and value2 in (0, None)
 
@@ -345,8 +556,12 @@ class DataMappingMixin(BaseModel):
     def preprocess_data(cls, data: Any) -> Any:
         return BitrixValidators.normalize_data(data, schema_class=cls)
 
+    # ----- Преобразование в словарь для БД -----
     def model_dump_db(self, exclude_unset: bool = False) -> dict[str, Any]:
-        data_dump: dict[str, Any] = {}
+        """
+        Возвращает словарь для сохранения в БД, исключая служебные поля.
+        """
+        result: dict[str, Any] = {}
         data = self.model_dump(exclude_unset=exclude_unset)
         model_class = self.__class__
         for field_name, value in data.items():
@@ -359,11 +574,11 @@ class DataMappingMixin(BaseModel):
             )
             if bitrix_type in ("str_none", "int_none"):
                 if not value:
-                    data_dump[field_name] = None
+                    result[field_name] = None
                 else:
-                    data_dump[field_name] = value
+                    result[field_name] = value
                 continue
-            data_dump[field_name] = value
+            result[field_name] = value
 
             # elif key in self.FIELDS_BY_TYPE_ALT.get("dict_none_str", []):
             #     if value is None:
@@ -375,7 +590,7 @@ class DataMappingMixin(BaseModel):
             #         data[key] = None
             #     else:
             #         data[key] = value["value"]["text_field"]
-        return data_dump
+        return result
 
     # ----- Вспомогательные методы -----
     def _is_excluded_from_db(self, field_info: Any) -> bool:
@@ -387,38 +602,13 @@ class DataMappingMixin(BaseModel):
         )
         return exclude_flag is True
 
-    # Константы для преобразований
-    _BOOLEAN_FIELDS_TO_STRING: ClassVar[set[str]] = {
-        "UF_CRM_60D2AFAEB32CC",
-        "UF_CRM_1632738559",
-        "UF_CRM_1623830089",
-        "UF_CRM_60D97EF75E465",
-        "UF_CRM_61974C16DBFBF",
-    }  # transform to: 1 - True, 0 - False
-
-    _COMMUNICATION_TIME_FIELDS: ClassVar[set[str]] = {
-        "LAST_COMMUNICATION_TIME",
-        "lastCommunicationTime",
-    }
-
-    _SPECIAL_BOOLEAN_FIELDS: ClassVar[dict[str, Any]] = {
-        "webformId": (1, 0)  # (true_value, false_value)
-    }
-
-    _EXCLUDED_FIELDS: ClassVar[set[str]] = {"ID", "id", "external_id"}
-
-    _DUAL_ENUM: ClassVar[set[str]] = {
-        "payment_type",
-        "UF_CRM_1632738315",
-        "shipment_type",
-        "UF_CRM_1655141630",
-        "ufCrm_SMART_INVOICE_1651114959541",
-        "ufCrm_62B53CC5A2EDF",
-    }
-
-    _MONEY_FIELDS: ClassVar[set[str]] = {"UF_CRM_1760872964", "half_amount"}
-
-    def to_bitrix_dict_(self, alias_choice: int = 1) -> dict[str, Any]:
+    # ----- Преобразование в словарь для Bitrix -----
+    def to_bitrix_dict(
+        self,
+        alias_choice: int = 1,
+        exclude_none: bool = True,
+        exclude_unset: bool = True,
+    ) -> dict[str, Any]:
         """
         Преобразует модель Pydantic в словарь, оптимизированный для
         Bitrix API.
@@ -436,6 +626,8 @@ class DataMappingMixin(BaseModel):
                 <1 - преобразуется в 1
                 >2 - преобразуется в 2
                 Default: 1.
+            exclude_none: Исключать поля со значением None.
+            exclude_unset: Исключать поля, которые не были явно установлены.
 
         Returns:
             dict[str, Any]: Словарь с данными, готовыми к отправке в
@@ -444,107 +636,79 @@ class DataMappingMixin(BaseModel):
         Raises:
             ValidationError: При ошибках преобразования данных
 
-        Notes:
-            - Поля со значением None исключаются из результата
-            - Неизмененные (unset) поля игнорируются
-            - Применяются преобразования через _apply_field_transformations
-            - Исключает поля из _EXCLUDED_FIELDS
-
         Example:
             >>> contact = ContactModel(name="John", phone="+123456789")
-            >>> bitrix_data = contact.to_bitrix_dict(alias_choice=2)
+            >>> bitrix_data = contact.to_bitrix_dict(alias_choice=1)
             {'NAME': 'John', 'PHONE_WORK': '+123456789'}
         """
-
-        # Строим маппинг алиасов
-        alias_mapping = self._build_alias_mapping(alias_choice)
-
-        # Получаем данные модели
-        data = self.model_dump(
-            by_alias=True,
-            exclude_none=True,
-            exclude_unset=True,
-        )
-
-        # Применяем маппинг алиасов и преобразования
         result: dict[str, Any] = {}
-
-        for field_name, value in data.items():
-            # Получаем финальный алиас для поля
-            field_alias = alias_mapping.get(field_name, field_name)
-
-            # Пропускаем исключенные поля
-            if field_alias in self._EXCLUDED_FIELDS:
-                continue
-
-            # Применяем преобразования
-            transformed_value = self._apply_field_transformations(
-                field_alias, value, alias_choice
-            )
-            result[field_alias] = transformed_value
-
-        return result
-
-    def _build_alias_mapping(self, alias_choice: int) -> dict[str, str]:
-        """Строит маппинг имен полей на выбранные алиасы"""
-        alias_mapping: dict[str, Any] = {}
-
-        for field_name, field_info in self.__class__.model_fields.items():
-            validation_alias = field_info.validation_alias
-
-            if isinstance(validation_alias, AliasChoices):
-                # Безопасный выбор алиаса с проверкой границ
-                choice_index = max(
-                    0,
-                    min(alias_choice - 1, len(validation_alias.choices) - 1),
-                )
-                alias_mapping[field_name] = validation_alias.choices[
-                    choice_index
-                ]
-
-        return alias_mapping
-
-    def to_bitrix_dict(self, alias_choice: int = 1) -> dict[str, Any]:
-        """
-        Преобразует модель Pydantic в словарь, оптимизированный для
-        Bitrix API.
-        """
-        result: dict[str, Any] = {}
+        fields_set = self.model_fields_set  # множество установленных полей
 
         # Итерируемся по полям модели, чтобы получить доступ к исходным
         # значениям и информации о полях (FieldInfo).
         for field_name, field_info in self.__class__.model_fields.items():
-            # Получаем значение поля напрямую из объекта.
-            # Это будет исходный Python-объект
-            # (например, экземпляр FieldValue), а не словарь.
+            # Пропускаем, если поле не установлено и exclude_unset=True
+            if exclude_unset and field_name not in fields_set:
+                continue
+
             value = getattr(self, field_name, None)
 
-            # Пропускаем, если значение не установлено (unset) или равно None.
-            # Это имитирует поведение exclude_unset=True и exclude_none=True.
-            if value is None:
+            # Пропускаем, если значение None и exclude_none=True
+            if exclude_none and value is None:
+                continue
+
+            if self._is_excluded_from_bitrix(field_info):
+                continue
+
+            if field_name == "extra_fields":
+                if isinstance(value, dict):
+                    for extra_name, extra_value in cast(
+                        "dict[str, Any]", value
+                    ).items():
+                        try:
+                            if config := self.extra_fields_config.get(
+                                extra_name
+                            ):
+                                alias = config["alias"]
+                                bitrix_type = config["type"]
+                                if transformer := self._TRANSFORMERS.get(
+                                    bitrix_type
+                                ):
+                                    result[alias] = transformer(extra_value)
+                        except Exception as e:  # noqa: BLE001
+                            logger.warning(f"{e}")
                 continue
 
             # Получаем финальный алиас для поля на основе alias_choice
             field_alias = self._get_field_alias(
                 field_name, field_info, alias_choice
             )
-
-            # Пропускаем исключенные поля (например, 'ID', 'id')
-            if field_alias in self._EXCLUDED_FIELDS:
-                continue
+            bitrix_type = self._get_json_extra_value(
+                field_info, "bitrix_type"
+            )
             # Применяем преобразования к исходному значению.
             # Теперь isinstance(value, FieldValue) будет работать корректно.
             transformed_value = self._apply_field_transformations(
-                field_alias, value, alias_choice
+                bitrix_type, value, alias_choice
             )
 
             # Если после преобразования значение стало None,
             # не добавляем его в результат.
-            if transformed_value is None:
+            if exclude_none and transformed_value is None:
                 continue
 
             result[field_alias] = transformed_value
         return result
+
+    # ----- Вспомогательные методы -----
+    def _is_excluded_from_bitrix(self, field_info: Any) -> bool:
+        """
+        Проверяет, помечено ли поле как исключаемое из Bitrix24.
+        """
+        exclude_flag = self._get_json_extra_value(
+            field_info, "exclude_from_bitrix"
+        )
+        return exclude_flag is True
 
     def _get_field_alias(
         self, field_name: str, field_info: FieldInfo, alias_choice: int
@@ -564,7 +728,7 @@ class DataMappingMixin(BaseModel):
         return field_info.alias or field_name
 
     def _apply_field_transformations(
-        self, field_alias: str, value: Any, alias_choice: int
+        self, bitrix_type: str, value: Any, alias_choice: int
     ) -> Any:
         """Применяет все необходимые преобразования к значению поля"""
 
@@ -591,23 +755,27 @@ class DataMappingMixin(BaseModel):
             return self._transform_comm_channel(
                 typed_comm_channel_list, alias_choice
             )
-        if isinstance(value, bool):
-            return self._transform_boolean_value(field_alias, value)
-        elif isinstance(value, datetime):
-            return self._transform_datetime_value(field_alias, value)
-        elif isinstance(value, float):
-            return self._transform_float_value(field_alias, value)
-        elif isinstance(value, UUID):
-            return str(value)
-        elif isinstance(value, tuple):
-            return self._transform_tuple_value(
-                field_alias, value, alias_choice
-            )
-        else:
-            return self._transform_numeric_value(field_alias, value)
+
+        if transformer := self._TRANSFORMERS.get(bitrix_type):
+            return transformer(value)
+        return cast("Any", value)
+        # if isinstance(value, bool):
+        #     return self._transform_boolean_value(field_alias, value)
+        # elif isinstance(value, datetime):
+        #     return self._transform_datetime_value(field_alias, value)
+        # elif isinstance(value, float):
+        #     return self._transform_float_value(field_alias, value)
+        # elif isinstance(value, UUID):
+        #     return str(value)
+        # elif isinstance(value, tuple):
+        #     return self._transform_tuple_value(
+        #         field_alias, value, alias_choice
+        #     )
+        # else:
+        #     return self._transform_numeric_value(field_alias, value)
 
     def _transform_field_value(
-        self, value: "FieldValue", alias_choice: int
+        self, value: FieldValue, alias_choice: int
     ) -> dict[str, Any]:
         """
         Преобразует объект FieldValue в формат, ожидаемый Bitrix API.
@@ -636,7 +804,7 @@ class DataMappingMixin(BaseModel):
         return result
 
     def _transform_comm_channel(
-        self, value: list["CommunicationChannel"], _alias_choice: int
+        self, value: list[CommunicationChannel], _alias_choice: int
     ) -> list[Any]:
         """
         Преобразует объект CommunicationChannel в формат, ожидаемый
@@ -646,49 +814,21 @@ class DataMappingMixin(BaseModel):
             cast("BaseModel", val).model_dump(by_alias=True) for val in value
         ]
 
-    def _transform_boolean_value(self, field_alias: str, value: bool) -> Any:
-        """Преобразует булево значение в нужный формат"""
-        if field_alias in self._SPECIAL_BOOLEAN_FIELDS:
-            true_val, false_val = self._SPECIAL_BOOLEAN_FIELDS[field_alias]
-            return true_val if value else false_val
-        elif field_alias in self._BOOLEAN_FIELDS_TO_STRING:
-            return "1" if value else "0"
-        else:
-            return "Y" if value else "N"
-
-    def _transform_datetime_value(
-        self, field_alias: str, value: datetime
-    ) -> str:
+    @classmethod
+    def _format_datetime(cls, value: datetime | None) -> str:
         """Преобразует datetime в строковый формат"""
-        if field_alias in self._COMMUNICATION_TIME_FIELDS:
-            return value.strftime("%d.%m.%Y %H:%M:%S")
-        else:
-            # Стандартный ISO формат с часовым поясом
-            # iso_format = value.isoformat()
-            # Убедимся, что часовой пояс в правильном формате
-            # if (
-            #     iso_format and iso_format[-5] in ("+", "-") and
-            #     ":" not in iso_format[-5:]
-            # ):
-            #    iso_format = f"{iso_format[:-2]}:{iso_format[-2:]}"
-            iso_format = value.strftime("%Y-%m-%dT%H:%M:%S%z")
-            if iso_format and iso_format[-5] in ("+", "-"):
-                iso_format = f"{iso_format[:-2]}:{iso_format[-2:]}"
-            return iso_format
 
-    def _transform_numeric_value(self, field_alias: str, value: Any) -> Any:
-        """Преобразует числовые значения для специальных полей"""
-        if field_alias in (
-            FIELDS_BY_TYPE["int_none"] + FIELDS_BY_TYPE["enums"]
-        ):
-            return "" if value == 0 else value
-        return value
+        if value is None:
+            return ""
+        iso_format = value.strftime("%Y-%m-%dT%H:%M:%S%z")
+        if iso_format and iso_format[-5] in ("+", "-"):
+            iso_format = f"{iso_format[:-2]}:{iso_format[-2:]}"
+        return iso_format
 
-    def _transform_float_value(self, field_alias: str, value: Any) -> Any:
+    @classmethod
+    def _format_money(cls, value: Any) -> Any:
         """Преобразует числовые значения для специальных полей"""
-        if field_alias in self._MONEY_FIELDS:
-            return f"{value}|{CURRENCY}"
-        return value
+        return f"{value}|{settings.bitrix24.currency}"
 
     def _transform_tuple_value(
         self, _field_alias: str, value: Any, alias_choice: int
@@ -698,63 +838,3 @@ class DataMappingMixin(BaseModel):
             return value[alias_choice - 1]
         except Exception:  # noqa: BLE001
             return value[0]
-
-
-class FieldText(BaseModel):
-    text_field: str | None = Field(
-        None, validation_alias=AliasChoices("TEXT", "text")
-    )  # TEXT
-    type_field: str | None = Field(
-        "HTML", validation_alias=AliasChoices("TYPE", "type")
-    )  # TYPE (HTML/TEXT)
-
-    def to_bitrix_dict(self, alias_choice: int) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-
-        for field_name, field_info in self.__class__.model_fields.items():
-            value = getattr(self, field_name, None)
-            if value is None:
-                continue
-
-            # Получаем финальный алиас для поля на основе alias_choice
-            field_alias = self._get_field_alias(field_info, alias_choice)
-
-            result[field_alias] = value
-
-        return result
-
-    def _get_field_alias(
-        self, field_info: FieldInfo, alias_choice: int
-    ) -> str:
-        """
-        Вспомогательный метод для получения алиаса поля из FieldInfo.
-        """
-        validation_alias = field_info.validation_alias
-        if isinstance(validation_alias, AliasChoices):
-            # Безопасный выбор алиаса с проверкой границ
-            choice_index = max(
-                0, min(alias_choice - 1, len(validation_alias.choices) - 1)
-            )
-            return validation_alias.choices[choice_index]  # type: ignore
-
-        # Если AliasChoices не используется, пробуем получить обычный алиас
-        return field_info.alias or field_info.name  # type: ignore
-
-    model_config = ConfigDict(populate_by_name=True)
-
-
-class FieldValue(BaseModel):
-    value_id: int | None = Field(None, alias="valueId")  # id value
-    value: str | FieldText = Field(..., alias="value")  # value
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    @property
-    def text(self) -> str | None:
-        """
-        Возвращает текстовое значение вне зависимости от типа поля value.
-        """
-        content = self.value
-        if isinstance(content, str):
-            return content
-        return content.text_field

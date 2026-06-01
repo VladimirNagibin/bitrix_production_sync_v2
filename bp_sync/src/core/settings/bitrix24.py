@@ -20,6 +20,7 @@ DEFAULT_SERVICE_USER_ID = 1
 DEFAULT_PROVIDER = "B24"
 DEFAULT_MAX_PROCESSING_STAGE = 5
 DEFAULT_SYSTEM_USER_ID = 1
+DEFAULT_CURRENCY = "KZT"
 
 # Наборы событий вебхуков
 DEAL_WEBHOOK_EVENTS = {"ONCRMDEALUPDATE", "ONCRMDEALADD", "ONCRMDEALDELETE"}
@@ -57,6 +58,10 @@ class Bitrix24Settings(BaseSettings):
         description="OAuth redirect URI",
     )
 
+    currency: str = Field(
+        default=DEFAULT_CURRENCY,
+        description="Currency for Bitrix24",
+    )
     # ----- timezone -----
     server_zone_info: str = Field(
         default="Europe/Moscow",

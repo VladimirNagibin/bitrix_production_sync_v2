@@ -17,7 +17,6 @@ from core.exceptions.schemas import (
 )
 from core.logger import logger
 
-# from .enums import CURRENCY
 from .mixins import DataMappingMixin
 
 
@@ -69,6 +68,9 @@ class CommonFieldMixin(DataMappingMixin):
         default=None,
         validation_alias=AliasChoices("ID", "id"),
         description="Внешний идентификатор (ID из Битрикс)",
+        json_schema_extra={
+            "exclude_from_bitrix": True,
+        },
     )
     extra_fields: dict[str, Any] = Field(
         default_factory=dict,

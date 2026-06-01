@@ -54,7 +54,7 @@ class BaseContact:
     export: bool | None = Field(
         None,
         alias="EXPORT",
-        json_schema_extra={"bitrix_type": "bool_yn"},
+        json_schema_extra={"bitrix_type": "bool_none_yn"},
     )
     origin_version: str | None = Field(
         None,
@@ -134,28 +134,7 @@ class ContactCreate(
     а также добавляет служебные поля (даты создания, создателя и т.д.).
     """
 
-    EXTRA_FIELDS: ClassVar[dict[str, dict[str, str]]] = {
-        "honorific": {
-            "alias": "HONORIFIC",
-            "type": "str_none",
-            "comment": "Обращение",
-        },
-        "photo": {
-            "alias": "PHOTO",
-            "type": "dict_none",
-            "comment": "Фотография",
-        },
-        "id_article_knowledge_base": {
-            "alias": "UF_CRM_CONTACT_ITS_ARTICLE_ID",
-            "type": "str_none",
-            "comment": "ID статьи в Базе Знаний",
-        },
-        "business": {
-            "alias": "UF_CRM_1779861791",
-            "type": "str_none",
-            "comment": "Список дел",
-        },
-    }
+    EXTRA_FIELDS_FILENAME: ClassVar[str] = "contact_extra_fields.json"
 
     @classmethod
     def get_default_entity(cls, external_id: int | str) -> "ContactCreate":
@@ -208,3 +187,5 @@ class ContactUpdate(
     Наследует те же поля, что и ContactCreate, но с поддержкой частичного
     обновления (через BaseUpdateSchema).
     """
+
+    EXTRA_FIELDS_FILENAME: ClassVar[str] = "contact_extra_fields.json"

@@ -43,8 +43,12 @@ class BitrixValidators:
                 "str_none": lambda v: v if v else None,
                 "int_none": lambda v: None if not v or v == "0" else v,
                 "int_user": lambda v: BitrixValidators._sanitize_user_id(v),
-                "bool": lambda v: bool(v in ("Y", "1", 1, True)),
-                "bool_none": lambda v: bool(v in ("Y", "1", 1, True)),
+                "bool_yn": lambda v: bool(v in ("Y", "1", 1, True)),
+                "bool_none_yn": lambda v: (
+                    True
+                    if v.trim().upper() == "Y"
+                    else (False if v.trim().upper() == "N" else None)
+                ),
                 "datetime": (
                     lambda v: BitrixValidators._sanitize_datetime_value(v)
                 ),
