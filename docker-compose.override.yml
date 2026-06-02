@@ -2,6 +2,7 @@ services:
   bp_sync:
     volumes:
       - ./bp_sync/src:/app/src
+      - ./bp_sync/config:/app/src/config
     env_file:
       - ./.env
     ports:

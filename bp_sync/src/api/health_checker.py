@@ -41,6 +41,7 @@ async def simple_page(
 #     get_contact_bitrix_client
 # )
 # from services.contacts.contact_bitrix_client import ContactBitrixClient
+# from schemas.contact_schemas import ContactCreate, ContactUpdate
 
 
 # @health_router.get(
@@ -58,9 +59,10 @@ async def simple_page(
 
 #     client2 = await contact_bitrix_client.get(2)
 #     diff = client.get_changes(client2)
+#     contact = ContactUpdate(extra_fields={"honorific": "Mr."})
 #     # await contact_bitrix_client.bitrix_client.oauth_client.
 #     #     token_storage.delete_token("access_token")
 #     # await contact_bitrix_client.bitrix_client.oauth_client.
 #     #     token_storage.delete_token("refresh_token")
 
-#     return SuccessResponse(message="test", data=client.model_dump_db())
+#     return SuccessResponse(message="test", data=contact.to_bitrix_dict())

@@ -14,12 +14,9 @@ from typing import (
     cast,
 )
 
-# from uuid import UUID
 from pydantic import (
     AliasChoices,
     BaseModel,
-    ConfigDict,
-    Field,
     model_validator,
 )
 
@@ -31,6 +28,7 @@ from core.exceptions.schemas import (
 from core.logger import logger
 
 from .bitrix_validators import BitrixValidators
+from .field_models import CommunicationChannel, FieldValue
 
 
 if TYPE_CHECKING:
@@ -47,86 +45,7 @@ class FieldConfig(TypedDict):
     comment: str
 
 
-class CommunicationChannel(BaseModel):
-    """Схема канала связи (телефон, email, веб, IM и т.п.)."""
-
-    external_id: int | None = Field(None, alias="ID")
-    type_id: str | None = Field(None, alias="TYPE_ID")
-    value_type: str = Field(..., alias="VALUE_TYPE")
-    value: str = Field(..., alias="VALUE")
-
-    model_config = ConfigDict(
-        populate_by_name=True,
-        arbitrary_types_allowed=True,
-        extra="ignore",
-    )
-
-
-class FieldText(BaseModel):
-    """Текстовое поле с возможностью указания типа (HTML/TEXT)."""
-
-    text_field: str | None = Field(
-        None, validation_alias=AliasChoices("TEXT", "text")
-    )  # TEXT
-    type_field: str | None = Field(
-        "HTML", validation_alias=AliasChoices("TYPE", "type")
-    )  # TYPE (HTML/TEXT)
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    def to_bitrix_dict(self, alias_choice: int) -> dict[str, Any]:
-        """
-        Преобразует модель в словарь для Bitrix API.
-        """
-        result: dict[str, Any] = {}
-
-        for field_name, field_info in self.__class__.model_fields.items():
-            value = getattr(self, field_name, None)
-            if value is None:
-                continue
-
-            # Получаем финальный алиас для поля на основе alias_choice
-            field_alias = self._get_field_alias(field_info, alias_choice)
-
-            result[field_alias] = value
-
-        return result
-
-    def _get_field_alias(
-        self, field_info: FieldInfo, alias_choice: int
-    ) -> str:
-        """
-        Возвращает алиас поля с учётом выбранной схемы.
-        """
-        validation_alias = field_info.validation_alias
-        if isinstance(validation_alias, AliasChoices):
-            # Безопасный выбор алиаса с проверкой границ
-            choice_index = max(
-                0, min(alias_choice - 1, len(validation_alias.choices) - 1)
-            )
-            return validation_alias.choices[choice_index]  # type: ignore
-
-        # Если AliasChoices не используется, пробуем получить обычный алиас
-        return field_info.alias or field_info.name  # type: ignore
-
-
-class FieldValue(BaseModel):
-    value_id: int | None = Field(None, alias="valueId")  # id value
-    value: str | FieldText = Field(..., alias="value")  # value
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    @property
-    def text(self) -> str | None:
-        """
-        Возвращает текстовое значение вне зависимости от типа поля value.
-        """
-        content = self.value
-        if isinstance(content, str):
-            return content
-        return content.text_field
-
-
+# ===== Основной миксин =====
 class DataMappingMixin(BaseModel):
     """
     Миксин для маппинга данных между Pydantic‑моделями, Bitrix24 и БД.
@@ -211,37 +130,46 @@ class DataMappingMixin(BaseModel):
 
         filename = cls.EXTRA_FIELDS_FILENAME
         if not filename:
-            logger.debug(f"{cls.__name__}: EXTRA_FIELDS_FILENAME not define")
+            logger.debug(f"{cls.__name__}: EXTRA_FIELDS_FILENAME not set")
             cls._extra_fields_cache = {}
             cls._extra_fields_loaded = True
             return
 
-        file_path = settings.app.base_dir.parent / filename
-        if not file_path:
-            logger.warning(f"{cls.__name__}: config not found: {filename}")
+        file_path = settings.app.base_dir / "config" / filename
+        if not file_path.is_file():
+            logger.warning(
+                f"{cls.__name__}: config not found: {file_path.resolve()}"
+            )
             cls._extra_fields_cache = {}
             cls._extra_fields_loaded = True
             return
 
         try:
             with file_path.open("r", encoding="utf-8") as f:
-                raw_config = json.load(f)
+                raw_config = cast("dict[str, Any]", json.load(f))
 
             # Валидация и приведение типов
             validated: dict[str, FieldConfig] = {}
             required_keys = {"alias", "type", "comment"}
             for key, value in raw_config.items():
-                if isinstance(value, dict) and required_keys <= value.keys():
-                    v = cast("dict[str, Any]", value)
-                    validated[key] = FieldConfig(
-                        alias=str(v["alias"]),
-                        type=str(v["type"]),
-                        comment=str(v["comment"]),
-                    )
+                if isinstance(value, dict):
+                    v_dict = cast("dict[str, Any]", value)
+                    if required_keys.issubset(v_dict.keys()):
+                        validated[key] = FieldConfig(
+                            alias=str(v_dict["alias"]),
+                            type=str(v_dict["type"]),
+                            comment=str(v_dict["comment"]),
+                        )
+                    else:
+                        missing = required_keys - set(v_dict.keys())
+                        logger.warning(
+                            f"{cls.__name__}: field '{key}' is missing "
+                            f"required keys {missing}, skipping"
+                        )
                 else:
                     logger.warning(
-                        f"{cls.__name__}: field '{key}' has invalid "
-                        "structure, skipping"
+                        f"{cls.__name__}: field '{key}' is not a dictionary, "
+                        "skipping"
                     )
 
             cls._extra_fields_cache = validated
@@ -643,7 +571,6 @@ class DataMappingMixin(BaseModel):
         """
         result: dict[str, Any] = {}
         fields_set = self.model_fields_set  # множество установленных полей
-
         # Итерируемся по полям модели, чтобы получить доступ к исходным
         # значениям и информации о полях (FieldInfo).
         for field_name, field_info in self.__class__.model_fields.items():

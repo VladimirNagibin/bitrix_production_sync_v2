@@ -11,12 +11,12 @@ from pydantic import (
 
 from core.exceptions.schemas import SchemaValidationError
 from schemas.fields import FIELDS_PRODUCT, FIELDS_PRODUCT_ALT
-from schemas.mixins import FieldValue
 
 from .base_schemas import CommonFieldMixin
 from .bitrix_validators import BitrixValidators
+from .data_mapping import DataMappingMixin
 from .enums import EntityTypeAbbr
-from .mixins import DataMappingMixin
+from .field_models import FieldValue
 
 
 # from .fields import FIELDS_PRODUCT, FIELDS_PRODUCT_ALT

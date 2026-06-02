@@ -13,7 +13,7 @@ from .base_schemas import (
     HasCommunicationCreateMixin,
     HasCommunicationUpdateMixin,
 )
-from .mixins import CommunicationChannel
+from .field_models import CommunicationChannel
 
 
 # ===== Константы =====

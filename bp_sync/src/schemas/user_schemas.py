@@ -4,8 +4,8 @@ from typing import ClassVar
 from pydantic import ConfigDict, Field, field_validator
 
 from .base_schemas import CommonFieldMixin
+from .data_mapping import DataMappingMixin
 from .fields import FIELDS_USER, FIELDS_USER_ALT
-from .mixins import DataMappingMixin
 
 
 class BaseUser(CommonFieldMixin):

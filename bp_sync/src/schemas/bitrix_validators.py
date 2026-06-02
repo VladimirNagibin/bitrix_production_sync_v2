@@ -41,22 +41,26 @@ class BitrixValidators:
         MappingProxyType(
             {
                 "str_none": lambda v: v if v else None,
-                "int_none": lambda v: None if not v or v == "0" else v,
+                "int_none": lambda v: None if not v or v == "0" else int(v),
                 "int_user": lambda v: BitrixValidators._sanitize_user_id(v),
                 "bool_yn": lambda v: bool(v in ("Y", "1", 1, True)),
-                "bool_none_yn": lambda v: (
-                    True
-                    if v.trim().upper() == "Y"
-                    else (False if v.trim().upper() == "N" else None)
+                "bool_none_yn": (
+                    lambda v: BitrixValidators._to_optional_bool(v)
+                ),
+                "bool_10": lambda v: bool(v in ("Y", "1", 1, True)),
+                "bool_none_10": (
+                    lambda v: BitrixValidators._to_optional_bool(v)
                 ),
                 "datetime": (
-                    lambda v: BitrixValidators._sanitize_datetime_value(v)
+                    lambda v: BitrixValidators._sanitize_datetime(
+                        v, nullable=False
+                    )
                 ),
                 "datetime_none": (
-                    lambda v: BitrixValidators._sanitize_datetime_value(v)
+                    lambda v: BitrixValidators._sanitize_datetime(v)
                 ),
                 "datetime_alt_none": (
-                    lambda v: BitrixValidators._sanitize_datetime_value(v)
+                    lambda v: BitrixValidators._sanitize_datetime(v)
                 ),
                 "float": lambda v: BitrixValidators._sanitize_float_value(v),
                 "list": lambda v: BitrixValidators._sanitize_list_value(v),
@@ -100,7 +104,7 @@ class BitrixValidators:
                 reason=f"Expected dict, got {type(data).__name__}",
             )
 
-        alias_map = cls._map_aliases_to_fields(schema_class)
+        alias_map = cls._build_alias_to_field_map(schema_class)
         result: dict[str, Any] = {}
 
         processed_data: dict[str, Any] = cast("dict[str, Any]", data)
@@ -208,7 +212,7 @@ class BitrixValidators:
         return text
 
     @classmethod
-    def _map_aliases_to_fields(
+    def _build_alias_to_field_map(
         cls, schema_class: type[BaseModel]
     ) -> dict[str, str]:
         """
@@ -233,9 +237,28 @@ class BitrixValidators:
         """
         Извлекает значение 'bitrix_type' из json_schema_extra поля.
         """
-        json_extra = field_info.json_schema_extra
-        if isinstance(json_extra, dict):
-            return cast("dict[str, Any]", json_extra).get("bitrix_type")
+        extra = field_info.json_schema_extra
+        if isinstance(extra, dict):
+            return cast("dict[str, Any]", extra).get("bitrix_type")
+        return None
+
+    @staticmethod
+    def _to_optional_bool(value: Any) -> bool | None:
+        """Преобразует Y/N, 1/0, True/False в bool или None."""
+        if (
+            value is True
+            or value == 1
+            or value == "1"
+            or (isinstance(value, str) and value.strip().upper() == "Y")
+        ):
+            return True
+        if (
+            value is False
+            or value == 0
+            or value == "0"
+            or (isinstance(value, str) and value.strip().upper() == "N")
+        ):
+            return False
         return None
 
     @staticmethod
@@ -278,8 +301,8 @@ class BitrixValidators:
             return 0.0
 
     @staticmethod
-    def _sanitize_datetime_value(
-        value: Any, tz: tzinfo | None = None
+    def _sanitize_datetime(
+        value: Any, nullable: bool = True, tz: tzinfo | None = None
     ) -> datetime | None:
         """
         Парсит строковые даты в объекты datetime.
@@ -293,12 +316,15 @@ class BitrixValidators:
             tz: Часовой пояс (по умолчанию DEFAULT_TIMEZONE).
 
         Returns:
-            datetime | None: Объект datetime или None при ошибке
+            datetime | None: Объект datetime или
+            None или Текущее время если nullable=False при ошибке
         """
-        if not value:
-            return None
-
         target_tz = tz or BitrixValidators._DEFAULT_TIMEZONE
+
+        default_value = None if nullable else datetime.now(target_tz)
+
+        if not value:
+            return default_value
 
         if isinstance(value, datetime):
             return (
@@ -308,7 +334,7 @@ class BitrixValidators:
             )
 
         if not isinstance(value, str):
-            return None
+            return default_value
 
         # Попытка парсинга формата Bitrix: "31.12.2023 23:59:59"
         try:
@@ -330,7 +356,7 @@ class BitrixValidators:
                 pass
 
         logger.warning(f"Failed to parse datetime string: {value!r}")
-        return None
+        return default_value
 
     @staticmethod
     def _sanitize_enum(
@@ -426,7 +452,7 @@ class BitrixValidators:
             if isinstance(value, str) and "|" in value:
                 # Обработка формата "1953500|KZT"
                 number_part = value.split("|")[0].strip()
-                return float(number_part)
-            return float(value)
+                return BitrixValidators._sanitize_float_value(number_part)
+            return BitrixValidators._sanitize_float_value(value)
         except (ValueError, TypeError, IndexError):
             return 0.0

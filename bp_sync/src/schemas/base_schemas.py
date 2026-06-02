@@ -17,7 +17,7 @@ from core.exceptions.schemas import (
 )
 from core.logger import logger
 
-from .mixins import DataMappingMixin
+from .data_mapping import DataMappingMixin
 
 
 # ===== Типы =====
