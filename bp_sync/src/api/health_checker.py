@@ -37,10 +37,13 @@ async def simple_page(
 
 # from fastapi import Depends
 
+# from core.logger import logger
 # from dependencies.dependencies_bitrix_entity import (
-#     get_contact_bitrix_client
+#     get_contact_bitrix_client,
+#     get_product_bitrix_client
 # )
 # from services.contacts.contact_bitrix_client import ContactBitrixClient
+# from services.products.product_bitrix_client import ProductBitrixClient
 # from schemas.contact_schemas import ContactCreate, ContactUpdate
 
 
@@ -53,6 +56,9 @@ async def simple_page(
 #     contact_bitrix_client: Annotated[
 #         ContactBitrixClient, Depends(get_contact_bitrix_client)
 #     ],
+#     product_bitrix_client: Annotated[
+#         ProductBitrixClient, Depends(get_product_bitrix_client)
+#     ],
 # ) -> SuccessResponse:
 
 #     client = await contact_bitrix_client.get(34)
@@ -60,9 +66,11 @@ async def simple_page(
 #     client2 = await contact_bitrix_client.get(2)
 #     diff = client.get_changes(client2)
 #     contact = ContactUpdate(extra_fields={"honorific": "Mr."})
+#     product = await product_bitrix_client.get(2)
+#     logger.info(f"{product}===========================")
 #     # await contact_bitrix_client.bitrix_client.oauth_client.
 #     #     token_storage.delete_token("access_token")
 #     # await contact_bitrix_client.bitrix_client.oauth_client.
 #     #     token_storage.delete_token("refresh_token")
 
-#     return SuccessResponse(message="test", data=contact.to_bitrix_dict())
+#     return SuccessResponse(message="test", data=product.model_dump_db())

@@ -163,7 +163,7 @@ class DataMappingMixin(BaseModel):
                     v_dict = cast("dict[str, Any]", value)
                     if required_keys.issubset(v_dict.keys()):
                         validated[key] = FieldConfig(
-                            alias=str(v_dict["alias"]),
+                            alias=v_dict["alias"],
                             type=str(v_dict["type"]),
                             comment=str(v_dict["comment"]),
                         )
@@ -197,7 +197,7 @@ class DataMappingMixin(BaseModel):
 
     # ----- Валидаторы -----
     @model_validator(mode="after")
-    def collect_extra_fields(self) -> DataMappingMixin:
+    def collect_additional_fields(self) -> DataMappingMixin:
         """
         Обрабатывает дополнительные поля (__pydantic_extra__) и сохраняет их
         в extra_fields.
@@ -210,14 +210,7 @@ class DataMappingMixin(BaseModel):
         ):
             return self
 
-        # Маппинг: алиас → { "name": имя_поля, "type": тип_преобразования }
-        alias_map: dict[str, dict[str, str]] = {}
-        for internal_name, config in self.extra_fields_config.items():
-            if isinstance(config["alias"], str):
-                alias_map[config["alias"]] = {
-                    "name": internal_name,
-                    "type": config["type"],
-                }
+        alias_map = self._build_alias_map(self.extra_fields_config)
 
         processed: dict[str, Any] = {}
 
@@ -243,6 +236,25 @@ class DataMappingMixin(BaseModel):
         object.__setattr__(self, "extra_fields", processed)
         object.__setattr__(self, "__pydantic_extra__", {})
         return self
+
+    def _build_alias_map(
+        self, data: dict[str, FieldConfig]
+    ) -> dict[str, dict[str, str]]:
+        # Маппинг: алиас → { "name": имя_поля, "type": тип_преобразования }
+        alias_map: dict[str, dict[str, str]] = {}
+        for internal_name, config in data.items():
+            aliases = config["alias"]
+            mapping_value = {
+                "name": internal_name,
+                "type": config["type"],
+            }
+            if isinstance(aliases, str):
+                alias_map[aliases] = mapping_value
+            elif isinstance(aliases, list):  # pyright: ignore[reportUnnecessaryIsInstance]
+                for alias in aliases:
+                    alias_map[alias] = mapping_value
+
+        return alias_map
 
     # ----- Публичные методы -----
     def get_changes(
@@ -674,11 +686,13 @@ class DataMappingMixin(BaseModel):
         ):
             typed_field_value_list = cast("list[FieldValue]", value)
             return [
-                self._transform_field_value(v, alias_choice)
+                self._transform_field_value(bitrix_type, v, alias_choice)
                 for v in typed_field_value_list
             ]
         if isinstance(value, FieldValue):
-            return self._transform_field_value(value, alias_choice)
+            return self._transform_field_value(
+                bitrix_type, value, alias_choice
+            )
         if (
             isinstance(value, list)
             and value
@@ -710,7 +724,7 @@ class DataMappingMixin(BaseModel):
         #     return self._transform_numeric_value(field_alias, value)
 
     def _transform_field_value(
-        self, value: FieldValue, alias_choice: int
+        self, bitrix_type: str, value: FieldValue, alias_choice: int
     ) -> dict[str, Any]:
         """
         Преобразует объект FieldValue в формат, ожидаемый Bitrix API.
@@ -734,7 +748,10 @@ class DataMappingMixin(BaseModel):
             else:
                 # Если это простое значение (например, строка),
                 # просто присваиваем его.
-                result["value"] = nested_value
+                if transformer := self._TRANSFORMERS.get(bitrix_type):
+                    result["value"] = transformer(nested_value)
+                else:
+                    result["value"] = nested_value
 
         return result
 

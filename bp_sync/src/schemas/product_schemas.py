@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import math
 import threading
 
+from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import (
@@ -10,6 +12,7 @@ from pydantic import (
     ConfigDict,
     Field,
     field_validator,
+    model_validator,
 )
 
 from core.exceptions.schemas import SchemaValidationError
@@ -18,14 +21,12 @@ from core.logger import logger
 from .base_schemas import CommonFieldMixin
 from .bitrix_validators import BitrixValidators
 from .data_mapping import DataMappingMixin
+from .field_models import FieldValue
 
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
     from .data_mapping import FieldConfig
     from .enums import EntityTypeAbbr
-    from .field_models import FieldValue
 
 
 # ===== Базовый класс для товаров в сущности (связка товар-сущность) =====
@@ -201,7 +202,7 @@ class BaseProductEntity(CommonFieldMixin):
         Сравнивает два значения с учётом допустимой погрешности для float.
         """
         if isinstance(value1, float) and isinstance(value2, float):
-            return abs(value1 - value2) <= eps
+            return math.isclose(value1, value2, rel_tol=eps)
         return bool(value1 == value2)
 
 
@@ -421,8 +422,10 @@ class BaseProduct(CommonFieldMixin):
         description="Тип описания (TEXT/HTML)",
     )
 
+    # ----- Свойства (Properties) -----
     properties: dict[str, FieldValue] = Field(
         default_factory=dict,
+        json_schema_extra={"exclude_from_bitrix": True},
         description=(
             "Дополнительные свойства товаров с указанием типа(TEXT, HTML)"
         ),
@@ -430,6 +433,7 @@ class BaseProduct(CommonFieldMixin):
 
     simple_properties: dict[str, FieldValue] = Field(
         default_factory=dict,
+        json_schema_extra={"exclude_from_bitrix": True},
         description="Дополнительные простые свойства товаров",
     )
 
@@ -451,6 +455,87 @@ class BaseProduct(CommonFieldMixin):
         if isinstance(value, str) and value.isdigit():
             return int(value)
         return value  # type: ignore[return-value]
+
+    @model_validator(mode="after")
+    def collect_additional_fields(self) -> BaseProduct:
+        """
+        Обрабатывает дополнительные поля (__pydantic_extra__) и сохраняет их
+        в extra_fields, properties.
+        """
+        # __pydantic_extra__ автоматически заполняется Pydantic при
+        # extra="allow"
+        if (
+            not hasattr(self, "__pydantic_extra__")
+            or not self.__pydantic_extra__
+        ):
+            return self
+
+        extra_alias_map = self._build_alias_map(self.extra_fields_config)
+        property_alias_map = self._build_alias_map(self.properties_config)
+        simple_property_alias_map = self._build_alias_map(
+            self.simple_properties_config
+        )
+
+        extra_processed: dict[str, Any] = {}
+        property_processed: dict[str, Any] = {}
+        simple_property_processed: dict[str, Any] = {}
+        map_processed = (
+            (extra_alias_map, extra_processed, 1),
+            (property_alias_map, property_processed, 2),
+            (simple_property_alias_map, simple_property_processed, 3),
+        )
+        extra_fields = dict(self.__pydantic_extra__)
+        for alias, value in extra_fields.items():
+            for alias_map, processed, mode in map_processed:
+                if self._check_field(
+                    alias, value, alias_map, processed, mode
+                ):
+                    continue
+
+        # Устанавливаем результат и очищаем __pydantic_extra__
+        object.__setattr__(self, "extra_fields", extra_processed)
+        object.__setattr__(self, "properties", property_processed)
+        object.__setattr__(
+            self, "simple_properties", simple_property_processed
+        )
+        object.__setattr__(self, "__pydantic_extra__", {})
+        return self
+
+    def _check_field(
+        self,
+        alias: str,
+        value: Any,
+        alias_map: dict[str, dict[str, str]],
+        processed: dict[str, Any],
+        mode: int,
+    ) -> bool:
+        field_config = alias_map.get(alias)
+        if field_config:
+            field_name = field_config["name"]
+            field_type = field_config["type"]
+            try:
+                val = None
+                if mode == 1:
+                    val = BitrixValidators.apply_field_transformer(
+                        field_name, value, field_type
+                    )
+                elif mode == 2:
+                    val = FieldValue(**value)
+                    val.value = BitrixValidators.apply_field_transformer(
+                        field_name, val.value, field_type
+                    )
+                elif mode == 3:
+                    val = FieldValue(**value)
+                if val:
+                    processed[field_name] = val
+            except Exception as e:  # noqa: BLE001
+                logger.error(
+                    f"Failed to transform extra field '{field_name}': {e}"
+                )
+                return False
+            else:
+                return True
+        return False
 
     # ----- Публичный метод доступа к конфигурации -----
     @classmethod
@@ -476,6 +561,45 @@ class BaseProduct(CommonFieldMixin):
     def simple_properties_config(self) -> dict[str, FieldConfig]:
         """Возвращает конфигурацию простых свойств товара."""
         return self.get_properties_configs()[1]
+
+    # ----- Преобразование в словарь для Bitrix -----
+    def to_bitrix_dict(
+        self,
+        alias_choice: int = 1,
+        exclude_none: bool = True,
+        exclude_unset: bool = True,
+    ) -> dict[str, Any]:
+        result = super().to_bitrix_dict(
+            alias_choice=alias_choice,
+            exclude_none=exclude_none,
+            exclude_unset=exclude_unset,
+        )
+        choice_index = 1 if alias_choice >= 2 else 0
+        simple_properties = getattr(self, "simple_properties", None)
+        if simple_properties:
+            for field_name, value in simple_properties.items():
+                field_config = self.simple_properties_config.get(field_name)
+                if field_config:
+                    aliases = field_config.get("alias")
+                    bitrix_type = field_config.get("type")
+                    if isinstance(aliases, list) and bitrix_type:
+                        alias = aliases[choice_index]
+                        result[alias] = self._transform_field_value(
+                            bitrix_type, value, alias_choice
+                        )
+        properties = getattr(self, "properties", None)
+        if properties:
+            for field_name, value in properties.items():
+                field_config = self.properties_config.get(field_name)
+                if field_config:
+                    aliases = field_config.get("alias")
+                    bitrix_type = field_config.get("type")
+                    if isinstance(aliases, list) and bitrix_type:
+                        alias = aliases[choice_index]
+                        result[alias] = self._transform_field_value(
+                            bitrix_type, value, alias_choice
+                        )
+        return result
 
     # ----- Приватные методы загрузки -----
     @classmethod

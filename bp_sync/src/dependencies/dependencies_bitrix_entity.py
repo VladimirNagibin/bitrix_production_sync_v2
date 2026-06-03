@@ -6,6 +6,7 @@ from fastapi import Depends
 # from ..bitrix_services.bitrix_api_client import BitrixAPIClient
 # from ..companies.company_bitrix_services import CompanyBitrixClient
 from services.contacts.contact_bitrix_client import ContactBitrixClient
+from services.products.product_bitrix_client import ProductBitrixClient
 
 # from ..deals.deal_bitrix_services import DealBitrixClient
 # from ..entities.entities_bitrix_services import EntitiesBitrixClient
@@ -41,6 +42,16 @@ async def get_contact_bitrix_client(
 ) -> AsyncGenerator[ContactBitrixClient]:
     """Зависимость для клиента сделок"""
     client = await dependency_container.get_entity_client(ContactBitrixClient)
+    yield client
+
+
+async def get_product_bitrix_client(
+    dependency_container: Annotated[
+        DependencyBitrixContainer, Depends(get_dependency_container)
+    ],
+) -> AsyncGenerator[ProductBitrixClient]:
+    """Зависимость для клиента товаров"""
+    client = await dependency_container.get_entity_client(ProductBitrixClient)
     yield client
 
 
