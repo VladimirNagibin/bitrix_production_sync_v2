@@ -1,5 +1,8 @@
-from datetime import datetime
-from typing import Any, ClassVar
+from __future__ import annotations
+
+import threading
+
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import (
     AliasChoices,
@@ -10,72 +13,151 @@ from pydantic import (
 )
 
 from core.exceptions.schemas import SchemaValidationError
-from schemas.fields import FIELDS_PRODUCT, FIELDS_PRODUCT_ALT
+from core.logger import logger
 
 from .base_schemas import CommonFieldMixin
 from .bitrix_validators import BitrixValidators
 from .data_mapping import DataMappingMixin
-from .enums import EntityTypeAbbr
-from .field_models import FieldValue
 
 
-# from .fields import FIELDS_PRODUCT, FIELDS_PRODUCT_ALT
-# from .helpers import parse_numeric_string
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from .data_mapping import FieldConfig
+    from .enums import EntityTypeAbbr
+    from .field_models import FieldValue
 
 
+# ===== Базовый класс для товаров в сущности (связка товар-сущность) =====
 class BaseProductEntity(CommonFieldMixin):
     """
-    Общие поля создания и обновления с алиасами для соответствия
-    SQLAlchemy модели
+    Базовые поля для товаров, связанных с сущностью
+    (сделка, лид, контакт и т.п.).
     """
 
-    FIELDS_BY_TYPE: ClassVar[dict[str, str]] = FIELDS_PRODUCT
-    FIELDS_BY_TYPE_ALT: ClassVar[dict[str, str]] = FIELDS_PRODUCT_ALT
-    _EXCLUDED_FIELDS = FIELDS_PRODUCT_ALT["exclude_b24"]
-
-    # Идентификаторы и основные данные
-    product_name: str | None = Field(None, alias="productName")  # Название
-    price: float | None = Field(None, alias="price")  # Цена
+    # ----- Основные поля -----
+    product_name: str | None = Field(
+        None,
+        alias="productName",
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Название товара",
+    )
+    price: float | None = Field(
+        None,
+        alias="price",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Цена",
+    )
     price_exclusive: float | None = Field(
-        None, alias="priceExclusive"
-    )  # Цена без налога со скидкой
-    price_netto: float | None = Field(None, alias="priceNetto")  # PRICE_NETTO
+        None,
+        alias="priceExclusive",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Цена без налога со скидкой",
+    )
+    price_netto: float | None = Field(
+        None,
+        alias="priceNetto",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="PRICE_NETTO",
+    )
     price_brutto: float | None = Field(
-        None, alias="priceBrutto"
-    )  # PRICE_BRUTTO
-    quantity: float | None = Field(None, alias="quantity")  # Количество
+        None,
+        alias="priceBrutto",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="PRICE_BRUTTO",
+    )
+    quantity: float | None = Field(
+        None,
+        alias="quantity",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Количество",
+    )
     discount_type_id: int | None = Field(
-        None, alias="discountTypeId"
-    )  # Тип скидки
+        None,
+        alias="discountTypeId",
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Тип скидки",
+    )
     discount_rate: float | None = Field(
-        None, alias="discountRate"
-    )  # Величина скидки
+        None,
+        alias="discountRate",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Величина скидки",
+    )
     discount_sum: float | None = Field(
-        None, alias="discountSum"
-    )  # Сумма скидки
-    tax_rate: float | None = Field(None, alias="taxRate")  # Налог
+        None,
+        alias="discountSum",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Сумма скидки",
+    )
+    tax_rate: float | None = Field(
+        None,
+        alias="taxRate",
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Налог",
+    )
     tax_included: bool | None = Field(
-        None, alias="taxIncluded"
-    )  # Налог включен в цену Y/N
-    customized: bool | None = Field(None, alias="customized")  # Изменен
+        None,
+        alias="taxIncluded",
+        json_schema_extra={"bitrix_type": "bool_none_yn"},
+        description="Налог включён в цену (Y/N)",
+    )
+    customized: bool | None = Field(
+        None,
+        alias="customized",
+        json_schema_extra={"bitrix_type": "bool_none_yn"},
+        description="Изменён",
+    )
     measure_code: int | None = Field(
-        None, alias="measureCode"
-    )  # Код единицы измерения
+        None,
+        alias="measureCode",
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Код единицы измерения",
+    )
     measure_name: str | None = Field(
-        None, alias="measureName"
-    )  # Единица измерения
-    sort: int | None = Field(None, alias="sort")  # Сортировка
-    type: int | None = Field(None, alias="type")  # TYPE
-    store_id: int | None = Field(None, alias="storeId")  # STORE_ID
+        None,
+        alias="measureName",
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Единица измерения",
+    )
+    sort: int | None = Field(
+        None,
+        alias="sort",
+        json_schema_extra={
+            "bitrix_type": "int_none",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="Сортировка",
+    )
+    type: int | None = Field(
+        None,
+        alias="type",
+        json_schema_extra={
+            "bitrix_type": "int_none",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="TYPE",
+    )
+    store_id: int | None = Field(
+        None,
+        alias="storeId",
+        json_schema_extra={
+            "bitrix_type": "int_none",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="STORE_ID",
+    )
 
+    # ----- Валидаторы -----
     @field_validator("external_id", mode="before")  # pyright: ignore[misc]
     @classmethod
     def convert_str_to_int(cls, value: str | int) -> int:
-        """Автоматическое преобразование строк в числа для ID"""
+        """Преобразует строковое представление ID в целое число."""
         if isinstance(value, str) and value.isdigit():
             return int(value)
         return value  # type: ignore[return-value]
 
+    # ----- Конфигурация -----
     model_config = ConfigDict(
         use_enum_values=True,
         populate_by_name=True,
@@ -83,69 +165,107 @@ class BaseProductEntity(CommonFieldMixin):
         extra="ignore",
     )
 
-    def equals_ignore_owner(self, other: "BaseProductEntity") -> bool:
-        """Сравнивает два объекта, игнорируя поля"""
-        fields_meta = self.__class__.model_fields
+    # ----- Публичные методы -----
+    def equals_ignore_owner(self, other: BaseProductEntity) -> bool:
+        """Сравнивает два объекта, игнорируя исключённые поля"""
 
-        for field_name in fields_meta:
-            if field_name in FIELDS_PRODUCT_ALT["exclude_b24"]:
+        for field_name, field_info in self.__class__.model_fields.items():
+            if self._should_skip_comparison(field_info):
                 continue
 
             value1 = getattr(self, field_name)
             value2 = getattr(other, field_name)
-            # Специальная обработка для float
-            if isinstance(value1, float) and isinstance(value2, float):
-                if abs(value1 - value2) > 1e-6:
-                    return False
-            elif value1 != value2:
+
+            if not self._is_values_equal(value1, value2):
                 return False
 
         return True
 
-    # def to_bitrix_dict(self) -> dict[str, Any]:
-    #    """Преобразует модель в словарь для Bitrix API"""
-    #    data = self.model_dump(
-    #        by_alias=True,
-    #        exclude_none=True,
-    #        exclude_unset=True, # опционально: исключить неустановленные поля
-    #    )
+    # ----- Вспомогательные методы -----
+    def _should_skip_comparison(self, field_info: Any) -> bool:
+        """
+        Проверяет, нужно ли пропустить поле при сравнении.
+        """
+        # Исключаем поля из основного сравнения (get_changes)
+        if self._is_excluded_from_comparison(field_info):
+            return True
+        # Исключаем поля из альтернативного сравнения (equals_ignore_owner)
+        exclude_alt = self._get_json_extra_value(
+            field_info, "exclude_from_alternate_comparison"
+        )
+        return exclude_alt is True
 
-    # Дополнительные преобразования
-    #    result: dict[str, Any] = {}
-    #    for alias, value in data.items():
-    #        if alias in FIELDS_PRODUCT_ALT["exclude_b24"]:
-    #            continue
-    #        elif isinstance(value, bool):
-    #            # Булёвы значения -> "Y"/"N"
-    #            result[alias] = "Y" if value else "N"
-    #        else:
-    #            # Остальные значения без изменений (проверка ссылочных полей)
-    #            result[alias] = value
-    #    return result
+    @staticmethod
+    def _is_values_equal(value1: Any, value2: Any, eps: float = 1e-6) -> bool:
+        """
+        Сравнивает два значения с учётом допустимой погрешности для float.
+        """
+        if isinstance(value1, float) and isinstance(value2, float):
+            return abs(value1 - value2) <= eps
+        return bool(value1 == value2)
 
 
+# ===== Классы для создания/обновления товаров в сущности =====
 class ProductEntityCreate(BaseProductEntity, DataMappingMixin):
-    """Модель для создания товаров в сущности"""
+    """Схема для создания товара внутри сущности (связка)."""
 
-    owner_id: int = Field(..., alias="ownerId")  # ID владельца
+    owner_id: int = Field(
+        ...,
+        alias="ownerId",
+        json_schema_extra={
+            "bitrix_type": "int",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="ID владельца",
+    )
     owner_type: EntityTypeAbbr = Field(
-        ..., alias="ownerType"
-    )  # Тип владельца
-    product_id: int = Field(..., alias="productId")  # Товар
+        ...,
+        alias="ownerType",
+        json_schema_extra={
+            "bitrix_type": "str",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="Тип владельца",
+    )
+    product_id: int = Field(
+        ...,
+        alias="productId",
+        json_schema_extra={"bitrix_type": "int"},
+        description="ID товара",
+    )
 
 
 class ProductEntityUpdate(BaseProductEntity):
-    """Модель для частичного обновления товаров в сущности"""
+    """Схема для частичного обновления товаров в сущности"""
 
-    owner_id: int | None = Field(None, alias="ownerId")  # ID владельца
+    owner_id: int | None = Field(
+        None,
+        alias="ownerId",
+        json_schema_extra={
+            "bitrix_type": "int",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="ID владельца",
+    )
     owner_type: EntityTypeAbbr | None = Field(
-        None, alias="ownerType"
-    )  # Тип владельца
-    product_id: int | None = Field(None, alias="productId")  # Товар
+        None,
+        alias="ownerType",
+        json_schema_extra={
+            "bitrix_type": "str",
+            "exclude_from_alternate_comparison": True,
+        },
+        description="Тип владельца",
+    )
+    product_id: int | None = Field(
+        None,
+        alias="productId",
+        json_schema_extra={"bitrix_type": "int"},
+        description="ID товара",
+    )
 
 
 class ListProductEntity(BaseModel):
-    """Схема для списка товаров сущности"""
+    """Схема для списка товаров, связанных с сущностью."""
 
     result: list[ProductEntityCreate]
 
@@ -156,7 +276,7 @@ class ListProductEntity(BaseModel):
         extra="ignore",
     )
 
-    def equals_ignore_owner(self, other: "ListProductEntity") -> bool:
+    def equals_ignore_owner(self, other: ListProductEntity) -> bool:
         """Сравнивает два списка продуктов, игнорируя owner-поля"""
         if len(self.result) != len(other.result):
             return False
@@ -167,169 +287,243 @@ class ListProductEntity(BaseModel):
         )
 
     def to_bitrix_dict(self) -> list[dict[str, Any]]:
+        """
+        Преобразует список в формат для отправки в Bitrix API.
+        """
         return [
             product_entity.to_bitrix_dict() for product_entity in self.result
         ]
 
     @property
     def count_products(self) -> int:
+        """Возвращает количество товаров в списке."""
         return len(self.result)
 
 
+# ===== Базовый класс для товаров (справочник товаров) =====
 class BaseProduct(CommonFieldMixin):
     """
-    Общие поля создания и обновления с алиасами для соответствия
-    SQLAlchemy модели
+    Базовый класс для товаров (продуктов) из справочника.
     """
 
-    FIELDS_BY_TYPE: ClassVar[dict[str, str]] = FIELDS_PRODUCT
-    FIELDS_BY_TYPE_ALT: ClassVar[dict[str, str]] = FIELDS_PRODUCT_ALT
+    # ----- Конфигурация загрузки свойств -----
+    PROPERTIES_FILENAME: ClassVar[str] = "product_properties_fields.json"
+    SIMPLE_PROPERTIES_FILENAME: ClassVar[str] = (
+        "simple_product_properties_fields.json"
+    )
 
+    _properties_cache: ClassVar[dict[str, FieldConfig] | None] = None
+    _simple_properties_cache: ClassVar[dict[str, FieldConfig] | None] = None
+    _properties_loaded: ClassVar[bool] = False
+    _properties_lock: ClassVar[threading.Lock] = threading.Lock()
+
+    # ----- Поля -----
     code: str | None = Field(
-        None, validation_alias=AliasChoices("CODE", "code")
-    )  # CODE
+        None,
+        validation_alias=AliasChoices("CODE", "code"),
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Символьный код",
+    )
     active: bool | None = Field(
-        None, validation_alias=AliasChoices("ACTIVE", "active")
-    )  # Активен
+        None,
+        validation_alias=AliasChoices("ACTIVE", "active"),
+        json_schema_extra={"bitrix_type": "bool_none_yn"},
+        description="Активен",
+    )
     sort: int | None = Field(
         None,
         validation_alias=AliasChoices("SORT", "sort"),
-    )  # Сортировка
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Сортировка",
+    )
     xml_id: str | None = Field(
-        None, validation_alias=AliasChoices("XML_ID", "xmlId")
-    )  # Внешний код
+        None,
+        validation_alias=AliasChoices("XML_ID", "xmlId"),
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Внешний код",
+    )
     date_create: datetime | None = Field(
         None,
         validation_alias=AliasChoices("DATE_CREATE", "dateCreate"),
-    )  # Дата создания
+        json_schema_extra={"bitrix_type": "datetime_none"},
+        description="Дата создания",
+    )
     date_modify: datetime | None = Field(
         None,
         validation_alias=AliasChoices("TIMESTAMP_X", "timestampX"),
-    )  # Дата изменения
+        json_schema_extra={"bitrix_type": "datetime_none"},
+        description="Дата изменения",
+    )
     modified_by: int | None = Field(
         None,
         validation_alias=AliasChoices("MODIFIED_BY", "modifiedBy"),
-    )  # Кем изменён
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Кем изменён",
+    )
     created_by: int | None = Field(
         None,
         validation_alias=AliasChoices("CREATED_BY", "createdBy"),
-    )  # Кем создан
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Кем создан",
+    )
     catalog_id: int | None = Field(
         None,
         validation_alias=AliasChoices("CATALOG_ID", "iblockId"),
-    )  # Каталог
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="ID каталога",
+    )
     section_id: int | None = Field(
         None,
         validation_alias=AliasChoices("SECTION_ID", "iblockSectionId"),
-    )  # Раздел
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="ID раздела",
+    )
     price: float | None = Field(
         None,
         validation_alias=AliasChoices("PRICE", "price"),
-    )  # Цена (в каталоге отдельный справочник)
+        json_schema_extra={"bitrix_type": "float_none"},
+        description="Цена (в каталоге отдельный справочник)",
+    )
     currency_id: str | None = Field(
         None,
         validation_alias=AliasChoices("CURRENCY_ID", "currency_id"),
-    )  # Валюта (в каталоге отдельный справочник)
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Валюта (в каталоге отдельный справочник)",
+    )
     vat_id: int | None = Field(
         None,
         validation_alias=AliasChoices("VAT_ID", "vatId"),
-    )  # Ставка НДС
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Ставка НДС",
+    )
     vat_included: bool | None = Field(
         None,
         validation_alias=AliasChoices("VAT_INCLUDED", "vatIncluded"),
-    )  # НДС включён в цену Y/N
+        json_schema_extra={"bitrix_type": "bool_none_yn"},
+        description="НДС включён в цену",
+    )
     measure: int | None = Field(
         None,
         validation_alias=AliasChoices("MEASURE", "measure"),
-    )  # Единица измерения
+        json_schema_extra={"bitrix_type": "int_none"},
+        description="Единица измерения",
+    )
     description: str | None = Field(
-        None, validation_alias=AliasChoices("DESCRIPTION", "detailText")
-    )  # DESCRIPTION
+        None,
+        validation_alias=AliasChoices("DESCRIPTION", "detailText"),
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Описание",
+    )
     description_type: str | None = Field(
         None,
         validation_alias=AliasChoices("DESCRIPTION_TYPE", "detailTextType"),
-    )  # DESCRIPTION_TYPE
-    link: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_111", "property111"),
-    )  # Ссылка
-    additional_description: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_113", "property113"),
-    )  # Доп описание (превью)
-    original_name: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_115", "property115"),
-    )  # Оригинальное название
-    standards: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_117", "property117"),
-    )  # Стандарты
-    article: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_119", "property119"),
-    )  # Артикул
-    characteristics: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_121", "property121"),
-    )  # Технические характеристики
+        json_schema_extra={"bitrix_type": "str_none"},
+        description="Тип описания (TEXT/HTML)",
+    )
 
-    specifications: list[FieldValue] | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_137", "property137"),
-    )  # Технические характеристики множественное поле
+    properties: dict[str, FieldValue] = Field(
+        default_factory=dict,
+        description=(
+            "Дополнительные свойства товаров с указанием типа(TEXT, HTML)"
+        ),
+    )
 
-    configuration: list[FieldValue] | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_139", "property139"),
-    )  # Комплектация множественное поле
+    simple_properties: dict[str, FieldValue] = Field(
+        default_factory=dict,
+        description="Дополнительные простые свойства товаров",
+    )
 
-    characteristics_for_print: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_123", "property123"),
-    )  # Тех характеристики для печати
-    complect_for_print: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_125", "property125"),
-    )  # Комплект поставки для печати
-    complects: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_127", "property127"),
-    )  # Комплект поставки
-    description_for_print: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_129", "property129"),
-    )  # Описание для документов
-    standards_for_print: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_131", "property131"),
-    )  # Стандарты для печати
-    brend: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_133", "property133"),
-    )  # Бренд
-
-    source: FieldValue | None = Field(
-        None,
-        validation_alias=AliasChoices("PROPERTY_141", "property141"),
-    )  # Источник (matest.kz, rup-su.ru, 1c и тд)
-
+    # ----- Валидаторы -----
     @field_validator("price", mode="before")  # pyright: ignore[misc]
     @classmethod
     def clean_numeric_fields(cls, v: Any) -> float | None:
+        """
+        Преобразует строки в числа для ценовых полей.
+        """
         return BitrixValidators.parse_numeric_string(v)
 
+    @field_validator("external_id", mode="before")
+    @classmethod
+    def convert_external_id_to_int(cls, value: str | int) -> int:
+        """
+        Преобразует строковое представление ID в целое число.
+        """
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return value  # type: ignore[return-value]
 
+    # ----- Публичный метод доступа к конфигурации -----
+    @classmethod
+    def get_properties_configs(
+        cls,
+    ) -> tuple[dict[str, FieldConfig], dict[str, FieldConfig]]:
+        """
+        Возвращает конфигурации свойств товаров (основные и простые),
+        загружая её при первом вызове.
+        """
+        if not cls._properties_loaded:
+            with cls._properties_lock:
+                if not cls._properties_loaded:
+                    cls._load_properties_configs()
+        return cls._properties_cache or {}, cls._simple_properties_cache or {}
+
+    @property
+    def properties_config(self) -> dict[str, FieldConfig]:
+        """Возвращает конфигурацию составных свойств товара."""
+        return self.get_properties_configs()[0]
+
+    @property
+    def simple_properties_config(self) -> dict[str, FieldConfig]:
+        """Возвращает конфигурацию простых свойств товара."""
+        return self.get_properties_configs()[1]
+
+    # ----- Приватные методы загрузки -----
+    @classmethod
+    def _load_properties_configs(cls) -> None:
+        """
+        Загружает конфигурации свойств из JSON-файлов.
+        """
+        if cls._properties_loaded:
+            return
+
+        cls._properties_cache = cls._load_config_file(cls.PROPERTIES_FILENAME)
+        cls._simple_properties_cache = cls._load_config_file(
+            cls.SIMPLE_PROPERTIES_FILENAME
+        )
+        cls._properties_loaded = True
+
+    @classmethod
+    def _load_config_file(
+        cls, filename: str | None
+    ) -> dict[str, FieldConfig]:
+        """
+        Загружает конфигурацию из указанного JSON-файла.
+        В случае ошибки возвращает пустой словарь.
+        """
+        if not filename:
+            logger.debug(f"Filename {filename} is empty, skipping load.")
+            return {}
+
+        return cls._load_data_from_file(filename)
+
+
+# ===== Классы для создания/обновления товаров (справочник) =====
 class ProductCreate(BaseProduct, DataMappingMixin):
     """Модель для создания товаров"""
 
     name: str = Field(
-        ..., validation_alias=AliasChoices("NAME", "name")
-    )  # Название
+        ...,
+        validation_alias=AliasChoices("NAME", "name"),
+        json_schema_extra={"bitrix_type": "str"},
+        description="Название товара",
+    )
 
     @classmethod
-    def get_default_entity(cls, external_id: int | str) -> "ProductCreate":
-        # Конвертируем str в int, если нужно
+    def get_default_entity(cls, external_id: int | str) -> ProductCreate:
+        """
+        Создаёт экземпляр ProductCreate с предустановленными значениями
+        для товара-заглушки.
+        """
         if isinstance(external_id, str) and external_id.isdigit():
             external_id = int(external_id)
         elif isinstance(external_id, str):
@@ -343,17 +537,19 @@ class ProductCreate(BaseProduct, DataMappingMixin):
         product_data: dict[str, Any] = {
             "name": f"Product #{external_id}",
             "external_id": external_id,
-            "is_deleted": True,
         }
-        return ProductCreate(**product_data)
+        return cls(**product_data)
 
 
 class ProductUpdate(BaseProduct, DataMappingMixin):
-    """Модель для частичного обновления товаров"""
+    """Схема для частичного обновления товаров"""
 
     name: str | None = Field(
-        None, validation_alias=AliasChoices("NAME", "name")
-    )  # Название
+        None,
+        validation_alias=AliasChoices("NAME", "name"),
+        json_schema_extra={"bitrix_type": "str"},
+        description="Название товара",
+    )
 
 
 class ListProduct(BaseModel):

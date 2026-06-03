@@ -70,6 +70,7 @@ class CommonFieldMixin(DataMappingMixin):
         description="Внешний идентификатор (ID из Битрикс)",
         json_schema_extra={
             "exclude_from_bitrix": True,
+            "exclude_from_alternate_comparison": True,
         },
     )
     extra_fields: dict[str, Any] = Field(

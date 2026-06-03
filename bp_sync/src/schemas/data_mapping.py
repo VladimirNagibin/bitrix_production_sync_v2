@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 # ===== Конфигурация типов для extra_fields =====
 class FieldConfig(TypedDict):
-    alias: str
+    alias: str | list[str]
     type: str
     comment: str
 
@@ -135,14 +135,21 @@ class DataMappingMixin(BaseModel):
             cls._extra_fields_loaded = True
             return
 
+        cls._extra_fields_cache = cls._load_data_from_file(filename)
+        cls._extra_fields_loaded = True
+        return
+
+    @classmethod
+    def _load_data_from_file(cls, filename: str) -> dict[str, FieldConfig]:
+        """
+        Загружает конфигурацию из JSON-файла, указанного в filename.
+        """
         file_path = settings.app.base_dir / "config" / filename
         if not file_path.is_file():
             logger.warning(
                 f"{cls.__name__}: config not found: {file_path.resolve()}"
             )
-            cls._extra_fields_cache = {}
-            cls._extra_fields_loaded = True
-            return
+            return {}
 
         try:
             with file_path.open("r", encoding="utf-8") as f:
@@ -171,8 +178,6 @@ class DataMappingMixin(BaseModel):
                         f"{cls.__name__}: field '{key}' is not a dictionary, "
                         "skipping"
                     )
-
-            cls._extra_fields_cache = validated
             logger.info(
                 f"{cls.__name__}: loaded {len(validated)} extra fields from "
                 f"{file_path}"
@@ -181,14 +186,14 @@ class DataMappingMixin(BaseModel):
             logger.error(
                 f"{cls.__name__}: JSON decode error in {file_path}: {e}"
             )
-            cls._extra_fields_cache = {}
+            return {}
         except Exception as e:  # noqa: BLE001
             logger.exception(
                 f"{cls.__name__}: unexpected error loading config: {e}"
             )
-            cls._extra_fields_cache = {}
-        finally:
-            cls._extra_fields_loaded = True  # Гарантируем флаг при ошибке
+            return {}
+        else:
+            return validated
 
     # ----- Валидаторы -----
     @model_validator(mode="after")
@@ -208,10 +213,11 @@ class DataMappingMixin(BaseModel):
         # Маппинг: алиас → { "name": имя_поля, "type": тип_преобразования }
         alias_map: dict[str, dict[str, str]] = {}
         for internal_name, config in self.extra_fields_config.items():
-            alias_map[config["alias"]] = {
-                "name": internal_name,
-                "type": config["type"],
-            }
+            if isinstance(config["alias"], str):
+                alias_map[config["alias"]] = {
+                    "name": internal_name,
+                    "type": config["type"],
+                }
 
         processed: dict[str, Any] = {}
 
@@ -598,8 +604,10 @@ class DataMappingMixin(BaseModel):
                             ):
                                 alias = config["alias"]
                                 bitrix_type = config["type"]
-                                if transformer := self._TRANSFORMERS.get(
-                                    bitrix_type
+                                if isinstance(alias, str) and (
+                                    transformer := self._TRANSFORMERS.get(
+                                        bitrix_type
+                                    )
                                 ):
                                     result[alias] = transformer(extra_value)
                         except Exception as e:  # noqa: BLE001
