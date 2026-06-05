@@ -5,8 +5,12 @@ from fastapi import Depends
 
 # from ..bitrix_services.bitrix_api_client import BitrixAPIClient
 # from ..companies.company_bitrix_services import CompanyBitrixClient
-from services.contacts.contact_bitrix_client import ContactBitrixClient
-from services.products.product_bitrix_client import ProductBitrixClient
+from integrations.bitrix_services.contact_bitrix_client import (
+    ContactBitrixClient,
+)
+from integrations.bitrix_services.product_bitrix_client import (
+    ProductBitrixClient,
+)
 
 # from ..deals.deal_bitrix_services import DealBitrixClient
 # from ..entities.entities_bitrix_services import EntitiesBitrixClient

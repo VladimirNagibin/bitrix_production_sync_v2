@@ -4,14 +4,16 @@ from fastapi import status
 
 from core.exceptions.bitrix24 import BitrixApiError
 from core.logger import logger
+from integrations.bitrix_services.base_bitrix_client import (
+    BaseBitrixEntityClient,
+)
+from integrations.bitrix_services.decorators import handle_bitrix_errors
 from schemas.enums import EntityTypeAbbr
 from schemas.product_schemas import (  # ProductEntityCreate,
     ListProductEntity,
     ProductCreate,
     ProductUpdate,
 )
-from services.bitrix_services.base_bitrix_client import BaseBitrixEntityClient
-from services.bitrix_services.decorators import handle_bitrix_errors
 
 
 # from ..bitrix_services.base_bitrix_services import BaseBitrixEntityClient

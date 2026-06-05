@@ -1,5 +1,7 @@
+from integrations.bitrix_services.base_bitrix_client import (
+    BaseBitrixEntityClient,
+)
 from schemas.contact_schemas import ContactCreate, ContactUpdate
-from services.bitrix_services.base_bitrix_client import BaseBitrixEntityClient
 
 
 class ContactBitrixClient(

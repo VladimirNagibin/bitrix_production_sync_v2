@@ -20,10 +20,12 @@ from core.exceptions.bitrix24_container import (
 from core.exceptions.redis import RedisManagerConnectionError
 from core.logger import logger
 from db.redis import get_redis as get_redis_client
+from integrations.bitrix_services.base_bitrix_client import (
+    BaseBitrixEntityClient,
+)
+from integrations.bitrix_services.bitrix_api_client import BitrixAPIClient
+from integrations.bitrix_services.bitrix_oauth_client import BitrixOAuthClient
 from schemas.base_schemas import CommonFieldMixin
-from services.bitrix_services.base_bitrix_client import BaseBitrixEntityClient
-from services.bitrix_services.bitrix_api_client import BitrixAPIClient
-from services.bitrix_services.bitrix_oauth_client import BitrixOAuthClient
 from services.token_services.token_cipher import TokenCipher
 from services.token_services.token_storage import TokenStorage
 

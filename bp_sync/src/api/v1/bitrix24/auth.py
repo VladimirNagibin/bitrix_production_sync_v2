@@ -8,7 +8,7 @@ from core import settings
 from core.exceptions.bitrix24 import BitrixAuthError
 from core.logger import logger
 from dependencies.dependencies_bitrix import get_oauth_client
-from services.bitrix_services.bitrix_oauth_client import BitrixOAuthClient
+from integrations.bitrix_services.bitrix_oauth_client import BitrixOAuthClient
 
 
 auth_router = APIRouter()
